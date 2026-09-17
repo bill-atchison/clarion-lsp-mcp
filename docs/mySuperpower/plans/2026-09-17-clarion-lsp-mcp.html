@@ -128,6 +128,7 @@
 
 <h3>Conventions every task follows</h3>
 <ul>
+  <li>Tasks 1 through 8 run on Linux or Windows: they use temp directories and the fake server only. Task 9 needs Windows with Clarion 12 installed. <code>package.json</code> deliberately has no <code>"os"</code> field so <code>npm install</code> works on a Linux build agent; add <code>"os": ["win32"]</code> in Task 9 before <code>npm pack</code>.</li>
   <li>Source imports use <code>.js</code> extensions (<code>import { x } from "./clarion.js"</code>) because the project compiles with <code>module: NodeNext</code>. Test files import <code>../src/clarion.js</code> the same way; vitest resolves it to the <code>.ts</code>.</li>
   <li>Run tests with <code>npx vitest run &lt;file&gt;</code>. Run the type check with <code>npx tsc --noEmit</code>. Both must pass before every commit.</li>
   <li>Commit messages: imperative, one line, plus the trailer <code>Co-Authored-By: Claude Fable 5.1 &lt;noreply@anthropic.com&gt;</code>.</li>
@@ -153,7 +154,6 @@
   "bin": { "clarion-lsp-mcp": "dist/index.js" },
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": "&gt;=20" },
-  "os": ["win32"],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
@@ -672,7 +672,7 @@ describe("LspClient", () =&gt; {
     expect(client.running).toBe(false);
   });
 
-  it("uses the server's canonical URI form and round-trips Windows paths", () =&gt; {
+  it.skipIf(process.platform !== "win32")("uses the server's canonical URI form and round-trips Windows paths", () =&gt; {
     const p = "C:\\Work\\App\\main.clw";
     expect(toUri(p)).toBe("file:///c%3A/Work/App/main.clw");
     expect(fromUri(toUri(p))).toBe(p);
