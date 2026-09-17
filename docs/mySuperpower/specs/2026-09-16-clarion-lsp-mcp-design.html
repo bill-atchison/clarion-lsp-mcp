@@ -252,7 +252,7 @@ omitted, so the server keeps its own defaults. Code lens is never requested by t
   <tr><td><code>open_solution</code></td><td><code>solution_path?</code>, <code>configuration?</code>, <code>clarion_root?</code></td><td>start + updatePaths</td><td><code>{ solution, clarionRoot, clarionVersion, redirectionFile, ready }</code></td></tr>
   <tr><td><code>lsp_start</code></td><td>none</td><td><code>open_solution</code> with defaults</td><td>same as above; kept for skill compatibility</td></tr>
   <tr><td><code>get_solution_info</code></td><td>none</td><td>cached state</td><td><code>{ solution, clarionVersion, redirectionFile, ready }</code> or <code>{ solution: null }</code></td></tr>
-  <tr><td><code>get_project_source_files</code></td><td>none</td><td><code>clarion/getProjectFiles</code></td><td><code>[{ project, files: [absolutePath] }]</code></td></tr>
+  <tr><td><code>get_project_source_files</code></td><td>none</td><td><code>clarion/getSolutionTree</code>, then <code>clarion/getProjectFiles</code> per project GUID</td><td><code>[{ project, files: [absolutePath] }]</code>, <code>.clw</code> and <code>.inc</code> only</td></tr>
   <tr><td><code>lsp_definition</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/definition</code></td><td><code>[{ file_path, line, character }]</code></td></tr>
   <tr><td><code>lsp_references</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/references</code></td><td><code>[{ file_path, line, character }]</code></td></tr>
   <tr><td><code>lsp_hover</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/hover</code></td><td><code>{ contents: string }</code></td></tr>
@@ -264,6 +264,12 @@ omitted, so the server keeps its own defaults. Code lens is never requested by t
 </table>
 <p>Every position tool calls <code>openDocument</code> first. <code>lsp_diagnostics</code> treats a timeout as
 <code>pending: true</code>, never as clean, matching the IDE contract the skills rely on.</p>
+<p><code>get_project_source_files</code> is the one tool that composes two server calls. <code>clarion/getSolutionTree</code>
+returns projects with <code>name</code>, <code>path</code>, and <code>guid</code> but empty <code>sourceFiles</code>;
+<code>clarion/getProjectFiles({ projectGuid })</code> returns <code>{ files: [{ name, relativePath, project }] }</code>.
+The MCP joins <code>project.path</code> and <code>relativePath</code>; if that file does not exist on disk (redirected
+source), it asks <code>clarion/findFile</code> for the resolved path. Files that still cannot be resolved are reported
+under an <code>unresolved</code> list rather than dropped.</p>
 
 <h3>index.ts: the MCP server</h3>
 <p><code>McpServer</code> from the SDK over <code>StdioServerTransport</code>. Registers the twelve tools with zod schemas and
