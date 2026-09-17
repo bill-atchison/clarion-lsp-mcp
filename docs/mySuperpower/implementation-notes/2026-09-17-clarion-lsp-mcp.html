@@ -70,12 +70,25 @@ start on a real Node 20 build agent, downgrade to <code>vitest@^4.1.11</code> (d
 during this work.</p>
 </div>
 
+<div class="entry">
+<span class="tag">Task 2</span>
+<p><code>test/clarion.test.ts</code>: added <code>delete process.env.CLARION_ROOT;</code> to
+<code>beforeEach</code> (the plan's version only cleared it in <code>afterEach</code>). This sandbox's
+Windows host has a real Clarion 12 install with <code>CLARION_ROOT=C:\Clarion12</code> set in the ambient
+shell environment (for the real <code>clarion-assistant</code> plugin). Without clearing it in
+<code>beforeEach</code> too, the very first test ("picks the highest version...") read the host's real
+<code>CLARION_ROOT</code> instead of the temp-directory fixture and failed by finding
+<code>C:\Clarion12</code> instead of the test's own <code>Clarion12</code> under the temp drive. This is a
+root-cause fix to make the test hermetic against the host environment, not a behavior change to
+<code>findClarionRoot</code> itself (whose contract, "<code>CLARION_ROOT</code> env var beats
+auto-detection," is exactly what <code>afterEach</code> already assumed by cleaning it up).</p>
+</div>
+
 <h2>Decisions not covered by the plan</h2>
 <div class="entry">
 <span class="tag">General</span>
-<p>None required beyond the two dependency-resolution notes above &mdash; the plan's code listings were
-followed byte-for-byte for Tasks 1&ndash;8 (types, function bodies, test bodies) since they compiled and
-passed as written.</p>
+<p>Otherwise the plan's code listings were followed byte-for-byte for Tasks 1&ndash;8 (types, function
+bodies, test bodies) since they compiled and passed as written.</p>
 </div>
 
 <h2>For the owner, before running Task 9</h2>
