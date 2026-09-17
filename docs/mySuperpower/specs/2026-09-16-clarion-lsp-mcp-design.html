@@ -214,7 +214,8 @@ parses <code>.sln</code>, <code>.cwproj</code>, and <code>.red</code> itself, so
                                                 // else the first *.red in &lt;root&gt;\bin
   redirectionPaths: ["C:\\Clarion12\\bin"],
   libsrcPaths:      ["C:\\Clarion12\\libsrc\\win", "C:\\Clarion12\\libsrc"],
-  projectPaths:     [],                         // server derives these from the .sln
+  projectPaths:     ["C:\\Work\\App"],          // [0] MUST be the solution directory; the
+                                                // server returns silently if this is empty
   macros:           { ClarionRoot: "C:\\Clarion12", bin: "C:\\Clarion12\\bin",
                       redname: "App.red" },
   configuration:    "Debug",
@@ -301,7 +302,7 @@ re-sends <code>updatePaths</code> only.</p>
   <tr><td>Zero or several <code>.sln</code> in cwd</td><td>Error lists what was found and asks for <code>solution_path</code>.</td></tr>
   <tr><td>Any tool before <code>open_solution</code></td><td>Returns <code>{ error: "No solution open. Call open_solution first." }</code>. No implicit start, so the agent learns the contract.</td></tr>
   <tr><td>File path outside the solution or missing</td><td>Position tools return an error; nothing is sent to the server.</td></tr>
-  <tr><td>Server exits or crashes</td><td>Client marks itself dead and keeps the stderr tail. The next tool call restarts the server, re-sends <code>updatePaths</code>, re-opens the requested document, and retries once. A second failure is returned to the agent with the stderr tail.</td></tr>
+  <tr><td>Server exits or crashes</td><td>Client marks itself dead and keeps the stderr tail. The next tool call runs the full <code>start()</code> again (spawn, <code>initialize</code>, <code>initialized</code>), re-sends <code>updatePaths</code>, re-opens the requested document, and retries once. A second failure is returned to the agent with the stderr tail.</td></tr>
   <tr><td>Request hangs</td><td>Every LSP request has a 15 second timeout, diagnostics 3 seconds, solution ready 30 seconds. Timeouts are reported as such, never as empty results.</td></tr>
   <tr><td>Host closes the transport</td><td><code>stop()</code> runs; the child never outlives the MCP.</td></tr>
 </table>
@@ -322,7 +323,7 @@ every host renders them the same way.</p>
   <li><strong>Server contract drift.</strong> The <code>clarion/updatePaths</code> field names and <code>clarion/getProjectFiles</code> shape are read from the shipped build, not a published API. A future addin release may change them. Mitigation: the integration test pins the local install, and <code>lsp_debug_status</code> exposes the server's stderr so drift is diagnosable.</li>
   <li><strong>Redirection file choice.</strong> Picking "the <code>.red</code> beside the <code>.sln</code>, else the first in <code>bin</code>" is a guess at what the IDE does. The <code>.cwproj</code> may name a different one. If the integration test shows missing includes, add a <code>redirection_file</code> argument to <code>open_solution</code> rather than growing heuristics.</li>
   <li><strong>Working directory ambiguity.</strong> Hosts pass different cwd values to MCP processes. Documented; explicit <code>solution_path</code> is the escape hatch.</li>
-  <li><strong>Large solutions.</strong> Indexing a big solution can exceed 30 seconds. The MCP returns <code>ready: false</code> and tools keep working as the index fills, which is the same experience the IDE gives.</li>
+  <li><strong>Large solutions.</strong> Indexing a big solution can exceed 30 seconds. The MCP returns <code>ready: false</code> and tools keep working as the index fills, which is the same experience the IDE gives. Because a malformed payload also produces silence from the server, <code>ready: false</code> includes the stderr tail so a rejected payload is distinguishable from a slow index.</li>
 </ul>
 
 <h2>Self-review</h2>
