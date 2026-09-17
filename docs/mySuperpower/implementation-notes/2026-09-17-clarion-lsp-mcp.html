@@ -29,17 +29,17 @@
 <h2>Environment actually used</h2>
 <div class="entry">
 <span class="tag">Platform</span>
-<p>The task instructions said "you are on Linux", but the sandbox this ran in reported
-<code>process.platform === "win32"</code> (Node v20.18.1 under MINGW64/Git Bash on Windows 11).
-No Clarion install exists in this sandbox, so this is functionally the same as a Linux CI agent for
-Tasks 1&ndash;8: no <code>C:\Clarion*</code> install is present, so <code>findClarionRoot()</code> without an
-override still throws "no install found" and every test in Tasks 1&ndash;8 uses the fake server or a
-temp-directory override, exactly as the plan intends.</p>
-<p>One consequence: the Windows-only URI test in <code>test/lsp.test.ts</code>
-(<code>it.skipIf(process.platform !== "win32")(...)</code>) actually <em>ran</em> here instead of being
-skipped, since <code>process.platform</code> is genuinely <code>win32</code>. That is a strictly stronger
-check than the plan anticipated for a Linux agent (it exercised the real Windows path-URI round trip),
-not a gap, so no action was needed.</p>
+<p>The task instructions described a Linux build agent, but this actually ran on the owner's own Windows
+11 machine (<code>process.platform === "win32"</code>, Node v20.18.1, MINGW64/Git Bash), which also has a
+real Clarion 12 install and <code>CLARION_ROOT</code> set in the ambient environment for the real
+<code>clarion-assistant</code> plugin (see the Task 2 entry below for the test fallout from that). Tasks
+1&ndash;8 were still implemented exactly as the plan specifies &mdash; platform-neutral code, fake server
+and temp directories only, no dependency on the real Clarion install &mdash; since the plan's own
+conventions section says Tasks 1&ndash;8 must run on Linux <em>or</em> Windows.</p>
+<p>One consequence of genuinely being on Windows: the Windows-only URI test in
+<code>test/lsp.test.ts</code> (<code>it.skipIf(process.platform !== "win32")(...)</code>) actually
+<em>ran</em> here rather than being skipped, exercising the real Windows path/URI round trip. That is
+a stronger check than a Linux agent would get, not a gap, so no action was needed.</p>
 </div>
 
 <h2>Deviations from the plan</h2>
@@ -82,6 +82,30 @@ shell environment (for the real <code>clarion-assistant</code> plugin). Without 
 root-cause fix to make the test hermetic against the host environment, not a behavior change to
 <code>findClarionRoot</code> itself (whose contract, "<code>CLARION_ROOT</code> env var beats
 auto-detection," is exactly what <code>afterEach</code> already assumed by cleaning it up).</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 4</span>
+<p><code>test/lsp.test.ts</code>, "times out a hung request": the plan's version used
+<code>{ requestTimeoutMs: 200 }</code> and asserted <code>/timed out|not found/</code>. Two real problems
+on this machine:</p>
+<ul>
+<li><code>requestTimeoutMs</code> also bounds the <code>initialize</code> request that
+<code>LspClient.start()</code> sends as part of the handshake. Spawning the fake server (cold Node
+process + ESM import of <code>vscode-jsonrpc/node</code>) and completing the <code>initialize</code>
+round trip measured 400&ndash;700&nbsp;ms on this host, well over 200&nbsp;ms, so <code>start()</code>
+itself threw ("initialize timed out after 200 ms") before the test ever reached the assertion it cared
+about.</li>
+<li>The installed <code>vscode-jsonrpc@9.0.2</code> rejects a request for an unregistered method with
+<code>code -32601</code> and message <code>"Unhandled method &lt;name&gt;"</code>, not a message
+containing "not found" as the plan assumed.</li>
+</ul>
+<p>Fix: raised <code>requestTimeoutMs</code> to <code>5000</code> (generous headroom for the handshake;
+the method-not-found rejection itself still returns in well under 50&nbsp;ms so the test stays fast) and
+widened the assertion regex to <code>/timed out|not found|Unhandled method/i</code>. This does not change
+<code>LspClient</code>'s behavior or the timeout contract in the spec (15s/3s/30s in the real
+implementation are untouched) &mdash; it only fixes a test fixture value and assertion wording that were
+tuned for a faster/different environment than this one.</p>
 </div>
 
 <h2>Decisions not covered by the plan</h2>
