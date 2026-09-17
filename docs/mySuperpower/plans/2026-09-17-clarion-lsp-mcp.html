@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarion LSP MCP Implementation Plan</title>
+<style>
+  :root{
+    --paper:#f4efe1; --ink:#221f18; --maroon:#8a2b27; --meta-bg:#e9e1cd;
+    --label:#6d5f4e; --value:#2b2820; --amber:#a8762b;
+    --serif:Georgia,'Times New Roman',serif;
+    --mono:ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:var(--serif);padding:3.5rem 2rem;}
+  .wrap{max-width:880px;margin:0 auto;}
+
+  main p,main ul,main ol{max-width:84ch;}
+  main pre{max-width:100%;overflow-x:auto;}
+
+  /* ---- FIXED masthead (do not restyle) ---- */
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.35em;
+           font-size:.8rem;font-weight:700;color:var(--maroon);margin:0 0 1.1rem;}
+  h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.6rem,6vw,4rem);
+     line-height:1.04;letter-spacing:-.01em;margin:0 0 .9rem;}
+  .subtitle{font-family:var(--serif);font-style:italic;font-weight:700;
+            font-size:clamp(1.25rem,2.4vw,1.7rem);line-height:1.3;
+            margin:0 0 1.9rem;max-width:52ch;}
+  .meta-card{display:grid;grid-template-columns:max-content 1fr;column-gap:1.75rem;
+             row-gap:.55rem;align-items:baseline;background:var(--meta-bg);
+             border-radius:14px;border-left:6px solid var(--maroon);padding:1.4rem 1.85rem;}
+  .meta-card dt{font-family:var(--mono);color:var(--label);font-size:.95rem;font-weight:400;}
+  .meta-card dd{font-family:var(--mono);color:var(--value);font-size:.95rem;margin:0;word-break:break-word;}
+  .agentic-note{background:var(--meta-bg);border-radius:14px;padding:1.25rem 1.85rem;
+                margin-top:1rem;font-family:var(--mono);color:var(--value);
+                font-size:.92rem;line-height:1.6;}
+
+  /* ---- BODY ---- */
+  main{margin-top:3.2rem;font-size:1.04rem;line-height:1.6;}
+  main h2{font-size:1.7rem;line-height:1.15;font-weight:700;letter-spacing:-.01em;
+          margin:3rem 0 1rem;padding-bottom:.4rem;border-bottom:2px solid var(--maroon);}
+  main h3{font-size:1.15rem;font-weight:700;margin:1.6rem 0 .5rem;}
+  main p{margin:0 0 .9rem;}
+  main ul,main ol{margin:0 0 1rem;padding-left:1.4rem;}
+  main li{margin-bottom:.3rem;}
+  main li::marker{color:var(--maroon);}
+  main code{font-family:var(--mono);font-size:.88em;background:var(--meta-bg);
+            padding:.08em .35em;border-radius:4px;}
+  main pre{background:var(--meta-bg);border-left:4px solid var(--amber);border-radius:0 10px 10px 0;
+           padding:.9rem 1.2rem;margin:.4rem 0 1.1rem;font-family:var(--mono);font-size:.84rem;line-height:1.48;}
+  main pre code{background:none;padding:0;font-size:inherit;}
+  main table{width:100%;border-collapse:collapse;margin:0 0 1.3rem;font-size:.96rem;}
+  main th{text-align:left;font-weight:700;padding:.45rem .7rem;border-bottom:2px solid var(--maroon);}
+  main td{padding:.45rem .7rem;border-bottom:1px solid #d5cbb3;vertical-align:top;}
+  main tr:last-child td{border-bottom:none;}
+  .overview dl{display:grid;grid-template-columns:max-content 1fr;column-gap:1.5rem;row-gap:.5rem;margin:0 0 1.2rem;}
+  .overview dt{font-weight:700;}
+  .overview dd{margin:0;}
+  section.task{margin:2.6rem 0 0;padding-top:.2rem;}
+  section.task h2{border-bottom-color:var(--amber);}
+  .files{background:var(--meta-bg);border-radius:10px;padding:.8rem 1.2rem;margin:0 0 1rem;font-family:var(--mono);font-size:.88rem;line-height:1.55;}
+  .files span{color:var(--label);display:inline-block;min-width:5.5em;}
+  ol.steps{list-style:none;padding-left:0;counter-reset:step;max-width:none;}
+  li.step{position:relative;padding-left:2.1rem;margin:0 0 1.1rem;counter-increment:step;}
+  li.step::before{content:"";position:absolute;left:0;top:.32em;width:1.05em;height:1.05em;
+                  border:2px solid var(--amber);border-radius:4px;background:transparent;}
+  li.step>strong{display:block;margin-bottom:.25rem;}
+  li.step>strong::before{content:counter(step) ". ";color:var(--maroon);}
+  li.step p{margin:.2rem 0 .5rem;}
+  .run{font-family:var(--mono);font-size:.88rem;}
+  .run b{font-family:var(--serif);font-weight:700;}
+  @media (max-width:600px){
+    body{padding:2rem 1rem;}
+    .meta-card,.overview dl{grid-template-columns:1fr;row-gap:.2rem;}
+    .meta-card dt{margin-top:.5rem;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Plan &middot; Implementation</p>
+      <h1>Clarion LSP MCP Implementation Plan</h1>
+      <p class="subtitle">TDD: a stdio MCP server that finds a Clarion install, spawns the Clarion Assistant language server, and proxies twelve tools to it.</p>
+      <dl class="meta-card">
+        <dt>Date</dt><dd>2026-09-17</dd>
+        <dt>Branch</dt><dd>main (empty repo; every task commits to main)</dd>
+        <dt>Spec</dt><dd>docs/mySuperpower/specs/2026-09-16-clarion-lsp-mcp-design.html</dd>
+      </dl>
+      <p class="agentic-note">REQUIRED SUB-SKILL: execute task-by-task with TDD (red &rarr; green &rarr; commit) using subagent-driven-development (recommended) or executing-plans. Codex review of this plan + spec before implementation; per-task two-stage review. Steps are checkbox-styled; track progress with your task tools, not by editing this file.</p>
+    </header>
+
+    <main>
+
+<section class="overview">
+<h2>Overview</h2>
+<dl>
+  <dt>Goal</dt><dd>Ship <code>clarion-lsp-mcp</code>, an npm package that lets any MCP host use the Clarion Assistant language server with the Clarion IDE closed.</dd>
+  <dt>Architecture</dt><dd>Thin proxy. <code>clarion.ts</code> locates a Clarion install and builds the <code>clarion/updatePaths</code> payload. <code>lsp.ts</code> spawns the bundled server and speaks JSON-RPC over stdio. <code>tools.ts</code> maps twelve MCP tools onto LSP requests. <code>index.ts</code> wires them to a stdio MCP transport.</dd>
+  <dt>Tech stack</dt><dd>TypeScript 5, ESM, Node 20+. <code>@modelcontextprotocol/sdk</code> 1.30, <code>vscode-jsonrpc</code> 9, <code>zod</code> 4. Tests with <code>vitest</code> 5. Windows only.</dd>
+</dl>
+
+<h3>Global constraints (from the spec)</h3>
+<ul>
+  <li>Node <code>&gt;=20</code>. Runtime deps only <code>@modelcontextprotocol/sdk</code>, <code>vscode-jsonrpc</code>, <code>zod</code>. Dev deps <code>typescript</code>, <code>vitest</code>, <code>@types/node</code>. The spec lists <code>tsx</code>; it is not needed because vitest runs TypeScript directly, so it is omitted.</li>
+  <li>Never write to stdout except through the MCP transport. All logging goes to stderr.</li>
+  <li>Tool names and result shapes exactly as the spec's tool table. Line and character are zero-based. File paths in and out are absolute Windows paths; URIs never reach the agent.</li>
+  <li>Timeouts: LSP request 15 s, diagnostics 3 s, solution ready 30 s. A timeout is reported as a timeout, never as an empty result.</li>
+  <li>All tool errors are returned as MCP results with <code>isError: true</code>, never thrown.</li>
+  <li>No mutating server calls. <code>lsp_rename</code> returns edits and never applies them.</li>
+  <li>The <code>clarion/updatePaths</code> payload must have <code>projectPaths[0]</code> equal to the solution directory. The server returns silently otherwise.</li>
+</ul>
+
+<h3>File map</h3>
+<table>
+  <tr><th>File</th><th>Responsibility</th><th>Task</th></tr>
+  <tr><td><code>package.json</code>, <code>tsconfig.json</code>, <code>vitest.config.ts</code>, <code>.gitignore</code>, <code>LICENSE</code></td><td>Build, test, publish configuration</td><td>1</td></tr>
+  <tr><td><code>src/clarion.ts</code></td><td><code>findClarionRoot</code>, <code>findSolution</code>, <code>buildPaths</code>. Pure path logic, no process spawning except the version read.</td><td>2, 3</td></tr>
+  <tr><td><code>src/lsp.ts</code></td><td><code>LspClient</code>: spawn, handshake, requests, document sync, diagnostics cache, stderr tail, stop.</td><td>4</td></tr>
+  <tr><td><code>test/fake-server.mjs</code></td><td>A tiny LSP server that answers every method the tools use, so tool tests run without Clarion.</td><td>4</td></tr>
+  <tr><td><code>test/harness.ts</code></td><td>Connects an MCP <code>Client</code> to the server over <code>InMemoryTransport</code> and returns a <code>call(name, args)</code> helper.</td><td>5</td></tr>
+  <tr><td><code>src/tools.ts</code></td><td>Session state, the twelve tool handlers, crash restart.</td><td>5, 6, 7, 8</td></tr>
+  <tr><td><code>src/index.ts</code></td><td>Executable entry: <code>McpServer</code> + <code>StdioServerTransport</code>, shutdown hooks.</td><td>5</td></tr>
+  <tr><td><code>test/fixtures/HelloLsp/</code>, <code>test/integration.test.ts</code></td><td>A real two-file Clarion solution and the test that runs it through the real server.</td><td>9</td></tr>
+  <tr><td><code>README.md</code></td><td>Install and per-host config.</td><td>9</td></tr>
+</table>
+
+<h3>Conventions every task follows</h3>
+<ul>
+  <li>Source imports use <code>.js</code> extensions (<code>import { x } from "./clarion.js"</code>) because the project compiles with <code>module: NodeNext</code>. Test files import <code>../src/clarion.js</code> the same way; vitest resolves it to the <code>.ts</code>.</li>
+  <li>Run tests with <code>npx vitest run &lt;file&gt;</code>. Run the type check with <code>npx tsc --noEmit</code>. Both must pass before every commit.</li>
+  <li>Commit messages: imperative, one line, plus the trailer <code>Co-Authored-By: Claude Fable 5.1 &lt;noreply@anthropic.com&gt;</code>.</li>
+</ul>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 1: Project scaffold</h2>
+<div class="files">
+  <span>Create:</span> package.json, tsconfig.json, vitest.config.ts, .gitignore, LICENSE, src/index.ts<br>
+  <span>Test:</span> the build itself (<code>tsc --noEmit</code>, <code>vitest run</code> with zero tests)
+</div>
+<p><strong>Produces:</strong> a compiling ESM TypeScript package with a placeholder entry point that later tasks replace.</p>
+<ol class="steps">
+<li class="step"><strong>Write package.json</strong>
+<pre><code>{
+  "name": "clarion-lsp-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that exposes the Clarion Assistant language server to AI agents with the IDE closed",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "clarion-lsp-mcp": "dist/index.js" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": "&gt;=20" },
+  "os": ["win32"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck &amp;&amp; npm test &amp;&amp; npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "vscode-jsonrpc": "^9.0.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.0"
+  }
+}</code></pre>
+</li>
+<li class="step"><strong>Write tsconfig.json and vitest.config.ts</strong>
+<pre><code>// tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
+
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+export default defineConfig({
+  test: { include: ["test/**/*.test.ts"], testTimeout: 60_000, hookTimeout: 60_000 },
+});</code></pre>
+</li>
+<li class="step"><strong>Write .gitignore, LICENSE, and the placeholder entry</strong>
+<pre><code># .gitignore
+node_modules/
+dist/
+
+# LICENSE: the MIT license text with "Copyright (c) 2026 William Atchison".
+
+// src/index.ts
+#!/usr/bin/env node
+console.error("clarion-lsp-mcp: not implemented yet");</code></pre>
+</li>
+<li class="step"><strong>Install and verify the toolchain runs</strong>
+<p class="run">npm install<br>npx tsc --noEmit<br>npx vitest run</p>
+<p><b>Expected:</b> install succeeds, tsc prints nothing, vitest reports "No test files found" and exits 0 (vitest 5 exits 0 on no files only with <code>--passWithNoTests</code>; if it exits 1, that is fine for this step and Task 2 adds the first test).</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add -A &amp;&amp; git commit -m "Scaffold TypeScript ESM package for clarion-lsp-mcp"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 2: Find the Clarion install</h2>
+<div class="files">
+  <span>Create:</span> src/clarion.ts, test/clarion.test.ts
+</div>
+<p><strong>Produces:</strong> <code>findClarionRoot(opts): ClarionRoot</code> and the <code>ClarionRoot</code> type used by every later task.</p>
+<ol class="steps">
+<li class="step"><strong>Write the failing tests</strong>
+<pre><code>// test/clarion.test.ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { findClarionRoot, SERVER_REL, SERVER_MAIN } from "../src/clarion.js";
+
+let drive: string;
+const versions: Record&lt;string, string&gt; = {};
+const readVersion = (root: string) =&gt; versions[path.basename(root)] ?? "0.0";
+
+function makeInstall(name: string, version: string, withServer = true) {
+  const root = path.join(drive, name);
+  mkdirSync(path.join(root, "bin"), { recursive: true });
+  writeFileSync(path.join(root, "bin", "Clarion.exe"), "");
+  if (withServer) {
+    const serverDir = path.join(root, SERVER_REL);
+    mkdirSync(path.dirname(path.join(serverDir, SERVER_MAIN)), { recursive: true });
+    writeFileSync(path.join(serverDir, SERVER_MAIN), "");
+    writeFileSync(path.join(serverDir, "node.exe"), "");
+  }
+  versions[name] = version;
+  return root;
+}
+
+beforeEach(() =&gt; { drive = mkdtempSync(path.join(tmpdir(), "clarion-")) + path.sep; });
+afterEach(() =&gt; { rmSync(drive, { recursive: true, force: true }); delete process.env.CLARION_ROOT; });
+
+describe("findClarionRoot", () =&gt; {
+  it("picks the highest version that has the addin server", () =&gt; {
+    makeInstall("Clarion11.1", "11.1.13855");
+    const c12 = makeInstall("Clarion12", "12.0.14625");
+    makeInstall("Clarion13", "13.0.1", false);          // newer but no addin
+    const found = findClarionRoot({ drive, readVersion });
+    expect(found.root).toBe(c12);
+    expect(found.version).toBe("12.0.14625");
+    expect(found.nodeExe).toBe(path.join(c12, SERVER_REL, "node.exe"));
+    expect(found.serverMain).toBe(path.join(c12, SERVER_REL, SERVER_MAIN));
+  });
+
+  it("honours CLARION_ROOT over auto-detection", () =&gt; {
+    makeInstall("Clarion12", "12.0.14625");
+    const c11 = makeInstall("Clarion11.1", "11.1.13855");
+    process.env.CLARION_ROOT = c11;
+    expect(findClarionRoot({ drive, readVersion }).root).toBe(c11);
+  });
+
+  it("rejects an override that lacks the addin server", () =&gt; {
+    const bare = makeInstall("Clarion13", "13.0.1", false);
+    expect(() =&gt; findClarionRoot({ override: bare, drive, readVersion }))
+      .toThrow(/Clarion Assistant/);
+  });
+
+  it("explains itself when nothing is installed", () =&gt; {
+    expect(() =&gt; findClarionRoot({ drive, readVersion })).toThrow(/CLARION_ROOT/);
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/clarion.test.ts</p>
+<p><b>Expected:</b> FAIL, cannot resolve <code>../src/clarion.js</code>.</p>
+</li>
+<li class="step"><strong>Write src/clarion.ts</strong>
+<pre><code>// src/clarion.ts
+import { existsSync, readdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
+export const SERVER_REL = path.join("accessory", "addins", "ClarionAssistant", "lsp-server");
+export const SERVER_MAIN = path.join("out", "server", "src", "server.js");
+
+export interface ClarionRoot {
+  root: string;
+  version: string;
+  serverDir: string;
+  nodeExe: string;
+  serverMain: string;
+}
+
+export interface FindRootOptions {
+  override?: string;                       // beats CLARION_ROOT; used by the tool argument
+  drive?: string;                          // default "C:\\"; tests point it at a temp dir
+  readVersion?: (root: string) =&gt; string;  // tests inject; default shells out to PowerShell
+}
+
+export function hasServer(root: string): boolean {
+  const serverDir = path.join(root, SERVER_REL);
+  return existsSync(path.join(root, "bin", "Clarion.exe")) &amp;&amp;
+    existsSync(path.join(serverDir, SERVER_MAIN)) &amp;&amp;
+    existsSync(path.join(serverDir, "node.exe"));
+}
+
+export function readVersion(root: string): string {
+  const exe = path.join(root, "bin", "Clarion.exe");
+  try {
+    const out = execFileSync("powershell.exe",
+      ["-NoProfile", "-Command", `(Get-Item '${exe}').VersionInfo.FileVersion`],
+      { encoding: "utf8", windowsHide: true });
+    return out.trim() || "0.0";
+  } catch {
+    return "0.0";
+  }
+}
+
+export function compareVersion(a: string, b: string): number {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i &lt; Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+function describe(root: string, version: string): ClarionRoot {
+  const serverDir = path.join(root, SERVER_REL);
+  return { root, version, serverDir,
+    nodeExe: path.join(serverDir, "node.exe"),
+    serverMain: path.join(serverDir, SERVER_MAIN) };
+}
+
+export function findClarionRoot(opts: FindRootOptions = {}): ClarionRoot {
+  const rv = opts.readVersion ?? readVersion;
+  const override = opts.override ?? process.env.CLARION_ROOT;
+  if (override) {
+    if (!hasServer(override)) {
+      throw new Error(`${override} is not a Clarion install with the Clarion Assistant addin ` +
+        `(expected bin\\Clarion.exe and ${SERVER_REL}\\node.exe).`);
+    }
+    return describe(override, rv(override));
+  }
+  const drive = opts.drive ?? "C:\\";
+  const found = readdirSync(drive, { withFileTypes: true })
+    .filter(d =&gt; d.isDirectory() &amp;&amp; /^clarion/i.test(d.name))
+    .map(d =&gt; path.join(drive, d.name))
+    .filter(hasServer)
+    .map(root =&gt; ({ root, version: rv(root) }))
+    .sort((a, b) =&gt; compareVersion(b.version, a.version));
+  if (!found.length) {
+    throw new Error(`No Clarion install with the Clarion Assistant addin found under ` +
+      `${drive}Clarion*. Set CLARION_ROOT to the install folder.`);
+  }
+  return describe(found[0].root, found[0].version);
+}</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/clarion.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 4 passed, tsc silent.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/clarion.ts test/clarion.test.ts &amp;&amp; git commit -m "Locate Clarion install with the Assistant addin server"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 3: Find the solution and build the updatePaths payload</h2>
+<div class="files">
+  <span>Modify:</span> src/clarion.ts (append), test/clarion.test.ts (append)
+</div>
+<p><strong>Produces:</strong> <code>findSolution(explicit, cwd): string</code>, <code>buildPaths(clarion, solutionFile, configuration): UpdatePathsParams</code>, and the <code>UpdatePathsParams</code> type.</p>
+<ol class="steps">
+<li class="step"><strong>Append the failing tests</strong>
+<pre><code>// test/clarion.test.ts (append; add findSolution, buildPaths to the import)
+describe("findSolution", () =&gt; {
+  it("uses an explicit .sln that exists", () =&gt; {
+    const sln = path.join(drive, "App.sln"); writeFileSync(sln, "");
+    expect(findSolution(sln, drive)).toBe(sln);
+  });
+  it("rejects an explicit path that is not a .sln or does not exist", () =&gt; {
+    expect(() =&gt; findSolution(path.join(drive, "App.cwproj"), drive)).toThrow(/\.sln/);
+    expect(() =&gt; findSolution(path.join(drive, "Nope.sln"), drive)).toThrow(/not found/);
+  });
+  it("finds exactly one .sln in cwd", () =&gt; {
+    const sln = path.join(drive, "Only.sln"); writeFileSync(sln, "");
+    expect(findSolution(undefined, drive)).toBe(sln);
+  });
+  it("lists candidates when there are several, and asks for a path when none", () =&gt; {
+    expect(() =&gt; findSolution(undefined, drive)).toThrow(/solution_path/);
+    writeFileSync(path.join(drive, "A.sln"), ""); writeFileSync(path.join(drive, "B.sln"), "");
+    expect(() =&gt; findSolution(undefined, drive)).toThrow(/A\.sln.*B\.sln/);
+  });
+});
+
+describe("buildPaths", () =&gt; {
+  it("prefers a .red beside the .sln and fills every field", () =&gt; {
+    const root = makeInstall("Clarion12", "12.0.14625");
+    writeFileSync(path.join(root, "bin", "ClarionNet40.red"), "");
+    const slnDir = path.join(drive, "Work"); mkdirSync(slnDir);
+    const sln = path.join(slnDir, "App.sln"); writeFileSync(sln, "");
+    writeFileSync(path.join(slnDir, "App.red"), "");
+    const clarion = findClarionRoot({ override: root, readVersion });
+    const p = buildPaths(clarion, sln, "Release");
+    expect(p).toEqual({
+      solutionFilePath: sln,
+      redirectionFile: path.join(slnDir, "App.red"),
+      redirectionPaths: [path.join(root, "bin")],
+      libsrcPaths: [path.join(root, "libsrc", "win"), path.join(root, "libsrc")],
+      projectPaths: [slnDir],
+      macros: { ClarionRoot: root, bin: path.join(root, "bin"), redname: "App.red" },
+      configuration: "Release",
+      clarionVersion: "12.0.14625",
+      defaultLookupExtensions: [".clw", ".inc", ".equ", ".eq", ".int"],
+    });
+  });
+  it("falls back to the first .red in bin, and to empty when there is none", () =&gt; {
+    const root = makeInstall("Clarion12", "12.0.14625");
+    const sln = path.join(drive, "App.sln"); writeFileSync(sln, "");
+    const clarion = findClarionRoot({ override: root, readVersion });
+    expect(buildPaths(clarion, sln).redirectionFile).toBe("");
+    writeFileSync(path.join(root, "bin", "ClarionNet40.red"), "");
+    const p = buildPaths(clarion, sln);
+    expect(p.redirectionFile).toBe(path.join(root, "bin", "ClarionNet40.red"));
+    expect(p.configuration).toBe("Debug");
+    expect(p.macros.redname).toBe("ClarionNet40.red");
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/clarion.test.ts</p>
+<p><b>Expected:</b> FAIL, <code>findSolution</code> and <code>buildPaths</code> are not exported.</p>
+</li>
+<li class="step"><strong>Append to src/clarion.ts</strong>
+<pre><code>// src/clarion.ts (append)
+export function findSolution(explicit: string | undefined, cwd: string): string {
+  if (explicit) {
+    const p = path.resolve(explicit);
+    if (!p.toLowerCase().endsWith(".sln")) throw new Error(`solution_path must be a .sln file: ${p}`);
+    if (!existsSync(p)) throw new Error(`Solution not found: ${p}`);
+    return p;
+  }
+  const found = readdirSync(cwd)
+    .filter(f =&gt; f.toLowerCase().endsWith(".sln"))
+    .map(f =&gt; path.join(cwd, f));
+  if (found.length === 1) return found[0];
+  if (found.length === 0) throw new Error(`No .sln file in ${cwd}. Pass solution_path.`);
+  throw new Error(`Several .sln files in ${cwd}: ${found.join(", ")}. Pass solution_path.`);
+}
+
+export interface UpdatePathsParams {
+  solutionFilePath: string;
+  redirectionFile: string;
+  redirectionPaths: string[];
+  libsrcPaths: string[];
+  projectPaths: string[];          // [0] MUST be the solution directory
+  macros: Record&lt;string, string&gt;;
+  configuration: string;
+  clarionVersion: string;
+  defaultLookupExtensions: string[];
+}
+
+function firstRed(dir: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  const f = readdirSync(dir).find(n =&gt; n.toLowerCase().endsWith(".red"));
+  return f ? path.join(dir, f) : undefined;
+}
+
+export function buildPaths(clarion: ClarionRoot, solutionFile: string,
+                           configuration = "Debug"): UpdatePathsParams {
+  const solutionDir = path.dirname(solutionFile);
+  const bin = path.join(clarion.root, "bin");
+  const redirectionFile = firstRed(solutionDir) ?? firstRed(bin) ?? "";
+  return {
+    solutionFilePath: solutionFile,
+    redirectionFile,
+    redirectionPaths: [bin],
+    libsrcPaths: [path.join(clarion.root, "libsrc", "win"), path.join(clarion.root, "libsrc")],
+    projectPaths: [solutionDir],
+    macros: { ClarionRoot: clarion.root, bin, redname: path.basename(redirectionFile) },
+    configuration,
+    clarionVersion: clarion.version,
+    defaultLookupExtensions: [".clw", ".inc", ".equ", ".eq", ".int"],
+  };
+}</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/clarion.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 10 passed, tsc silent.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/clarion.ts test/clarion.test.ts &amp;&amp; git commit -m "Resolve solution and build clarion/updatePaths payload"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 4: The LSP client and a fake server to test it</h2>
+<div class="files">
+  <span>Create:</span> src/lsp.ts, test/fake-server.mjs, test/lsp.test.ts
+</div>
+<p><strong>Produces:</strong> <code>LspClient</code> with <code>start(rootUri)</code>, <code>openSolution(params): Promise&lt;boolean&gt;</code>, <code>request(method, params)</code>, <code>notify(method, params)</code>, <code>openDocument(filePath): Promise&lt;{ uri, changed }&gt;</code>, <code>waitForDiagnostics(uri, ms)</code>, <code>diagnostics</code> map, <code>stderrTail</code>, <code>notificationCount</code>, <code>openDocumentCount</code>, <code>running</code>, <code>pid</code>, <code>stop()</code>; plus <code>toUri</code>, <code>fromUri</code>, <code>SpawnSpec</code>. The fake server is reused by Tasks 5 through 8.</p>
+<p>The fake server is the test double for the whole tool layer. It answers every LSP method the tools use with fixed data, honours the <code>projectPaths[0]</code> guard the real server has, and can be told to crash or stall through environment variables.</p>
+<ol class="steps">
+<li class="step"><strong>Write the fake server</strong>
+<pre><code>// test/fake-server.mjs
+// Minimal stand-in for the Clarion language server. Speaks LSP over stdio.
+// Env: FAKE_PROJECT_DIR (project path), FAKE_REDIR_PATH (findFile answer for redir.inc),
+//      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover).
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
+
+const conn = createMessageConnection(
+  new StreamMessageReader(process.stdin), new StreamMessageWriter(process.stdout));
+const r = (l, c, el = l, ec = c + 4) =&gt;
+  ({ start: { line: l, character: c }, end: { line: el, character: ec } });
+
+conn.onRequest("initialize", () =&gt; ({ capabilities: {} }));
+conn.onNotification("initialized", () =&gt; {});
+conn.onNotification("clarion/updatePaths", p =&gt; {
+  if (!p.projectPaths?.[0]) { process.stderr.write("No projectPaths provided\n"); return; }
+  if (process.env.FAKE_SLOW) return;
+  conn.sendNotification("clarion/solutionReady",
+    { solutionFilePath: p.solutionFilePath, projectCount: 1 });
+});
+function publish(uri, text) {
+  const diagnostics = text.includes("BAD")
+    ? [{ severity: 1, range: r(0, 0, 0, 3), message: "Unknown identifier BAD" }] : [];
+  conn.sendNotification("textDocument/publishDiagnostics", { uri, diagnostics });
+}
+conn.onNotification("textDocument/didOpen", ({ textDocument }) =&gt;
+  publish(textDocument.uri, textDocument.text));
+conn.onNotification("textDocument/didChange", ({ textDocument, contentChanges }) =&gt;
+  publish(textDocument.uri, contentChanges[0].text));
+conn.onRequest("textDocument/hover", ({ position }) =&gt; {
+  if (process.env.FAKE_CRASH_ON_HOVER) process.exit(3);
+  return { contents: { kind: "markdown", value: `hover ${position.line}:${position.character}` } };
+});
+conn.onRequest("textDocument/definition", ({ textDocument }) =&gt;
+  [{ uri: textDocument.uri, range: r(3, 2) }]);
+conn.onRequest("textDocument/references", ({ textDocument }) =&gt;
+  [{ uri: textDocument.uri, range: r(3, 2) }, { uri: textDocument.uri, range: r(7, 4) }]);
+conn.onRequest("textDocument/documentSymbol", () =&gt; [
+  { name: "Main", kind: 12, range: r(1, 0), selectionRange: r(1, 0),
+    children: [{ name: "Counter", kind: 13, range: r(2, 2), selectionRange: r(2, 2) }] },
+]);
+conn.onRequest("workspace/symbol", ({ query }) =&gt; [
+  { name: query, kind: 12, location: { uri: "file:///C:/fake/main.clw", range: r(1, 0) } },
+]);
+conn.onRequest("textDocument/rename", ({ textDocument, newName }) =&gt;
+  newName === "!" ? null : { changes: { [textDocument.uri]: [{ range: r(3, 2, 3, 6), newText: newName }] } });
+conn.onRequest("clarion/getSolutionTree", () =&gt; ({
+  name: "Fake", path: "C:\\fake\\Fake.sln",
+  projects: [{ name: "Fake", path: process.env.FAKE_PROJECT_DIR ?? "C:\\fake",
+               guid: "{ABC}", filename: "Fake.cwproj", sourceFiles: [] }],
+}));
+conn.onRequest("clarion/getProjectFiles", ({ projectGuid }) =&gt; ({
+  files: projectGuid === "{ABC}" ? [
+    { name: "main.clw", relativePath: "main.clw" },
+    { name: "redir.inc", relativePath: "redir.inc" },
+    { name: "ghost.inc", relativePath: "ghost.inc" },
+    { name: "notes.txa", relativePath: "notes.txa" },
+  ] : [],
+}));
+conn.onRequest("clarion/findFile", ({ filename }) =&gt;
+  filename === "redir.inc" &amp;&amp; process.env.FAKE_REDIR_PATH ? { path: process.env.FAKE_REDIR_PATH } : null);
+conn.onRequest("shutdown", () =&gt; null);
+conn.onNotification("exit", () =&gt; process.exit(0));
+conn.listen();</code></pre>
+</li>
+<li class="step"><strong>Write the failing client tests</strong>
+<pre><code>// test/lsp.test.ts
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { LspClient, toUri, fromUri } from "../src/lsp.js";
+import type { UpdatePathsParams } from "../src/clarion.js";
+
+const FAKE = path.resolve("test/fake-server.mjs");
+const spec = (env: Record&lt;string, string&gt; = {}) =&gt;
+  ({ command: process.execPath, args: [FAKE], cwd: process.cwd(), env });
+const params = (dir: string): UpdatePathsParams =&gt; ({
+  solutionFilePath: path.join(dir, "App.sln"), redirectionFile: "", redirectionPaths: [],
+  libsrcPaths: [], projectPaths: [dir], macros: {}, configuration: "Debug",
+  clarionVersion: "0.0", defaultLookupExtensions: [".clw"],
+});
+
+let dir: string; let client: LspClient | undefined;
+afterEach(async () =&gt; { await client?.stop(); if (dir) rmSync(dir, { recursive: true, force: true }); });
+
+describe("LspClient", () =&gt; {
+  it("starts, reaches ready, answers a request, and stops", async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "lsp-"));
+    client = new LspClient(spec());
+    await client.start(pathToFileURL(dir).href);
+    expect(client.running).toBe(true);
+    expect(await client.openSolution(params(dir))).toBe(true);
+    const h = await client.request&lt;{ contents: { value: string } }&gt;("textDocument/hover",
+      { textDocument: { uri: "file:///C:/x.clw" }, position: { line: 4, character: 2 } });
+    expect(h.contents.value).toBe("hover 4:2");
+    await client.stop();
+    expect(client.running).toBe(false);
+  });
+
+  it("reports ready:false when solutionReady never arrives and when projectPaths is empty", async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "lsp-"));
+    client = new LspClient(spec({ FAKE_SLOW: "1" }), { readyTimeoutMs: 300 });
+    await client.start(pathToFileURL(dir).href);
+    expect(await client.openSolution(params(dir))).toBe(false);
+    await client.stop();
+    client = new LspClient(spec(), { readyTimeoutMs: 300 });
+    await client.start(pathToFileURL(dir).href);
+    expect(await client.openSolution({ ...params(dir), projectPaths: [] })).toBe(false);
+    expect(client.stderrTail.join("\n")).toMatch(/No projectPaths/);
+  });
+
+  it("opens a document once, sends didChange only when the file changed, and caches diagnostics", async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "lsp-"));
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    client = new LspClient(spec());
+    await client.start(pathToFileURL(dir).href);
+    await client.openSolution(params(dir));
+    const first = await client.openDocument(file);
+    expect(first.changed).toBe(true);
+    expect(await client.waitForDiagnostics(first.uri, 2000)).toEqual([]);
+    expect((await client.openDocument(file)).changed).toBe(false);
+    writeFileSync(file, "  BAD\n");
+    const third = await client.openDocument(file);
+    expect(third.changed).toBe(true);
+    const diags = await client.waitForDiagnostics(third.uri, 2000);
+    expect(diags?.[0].message).toMatch(/BAD/);
+    expect(client.diagnostics.get(third.uri)).toEqual(diags);
+    expect(client.openDocumentCount).toBe(1);
+  });
+
+  it("times out a hung request and reports it as a timeout", async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "lsp-"));
+    client = new LspClient(spec(), { requestTimeoutMs: 200 });
+    await client.start(pathToFileURL(dir).href);
+    await expect(client.request("clarion/neverAnswered")).rejects.toThrow(/timed out|not found/);
+  });
+
+  it("marks itself not running when the child dies", async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "lsp-"));
+    client = new LspClient(spec({ FAKE_CRASH_ON_HOVER: "1" }));
+    await client.start(pathToFileURL(dir).href);
+    await expect(client.request("textDocument/hover",
+      { textDocument: { uri: "file:///C:/x.clw" }, position: { line: 0, character: 0 } })).rejects.toThrow();
+    await new Promise(r =&gt; setTimeout(r, 200));
+    expect(client.running).toBe(false);
+  });
+
+  it("round-trips Windows paths through file URIs", () =&gt; {
+    const p = "C:\\Work\\App\\main.clw";
+    expect(fromUri(toUri(p))).toBe(p);
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/lsp.test.ts</p>
+<p><b>Expected:</b> FAIL, cannot resolve <code>../src/lsp.js</code>.</p>
+</li>
+<li class="step"><strong>Write src/lsp.ts</strong>
+<pre><code>// src/lsp.ts
+import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter,
+         type MessageConnection } from "vscode-jsonrpc/node";
+import type { UpdatePathsParams } from "./clarion.js";
+
+export const REQUEST_TIMEOUT_MS = 15_000;
+export const DIAGNOSTICS_TIMEOUT_MS = 3_000;
+export const READY_TIMEOUT_MS = 30_000;
+
+export interface SpawnSpec { command: string; args: string[]; cwd: string; env?: Record&lt;string, string&gt;; }
+export interface ClientOptions { readyTimeoutMs?: number; requestTimeoutMs?: number; diagnosticsTimeoutMs?: number; }
+export interface Position { line: number; character: number; }
+export interface Range { start: Position; end: Position; }
+export interface Diagnostic { severity?: number; range: Range; message: string; }
+
+export const toUri = (p: string) =&gt; pathToFileURL(p).href;
+export const fromUri = (u: string) =&gt; fileURLToPath(u);
+const sleep = (ms: number) =&gt; new Promise&lt;void&gt;(r =&gt; setTimeout(r, ms));
+
+export class LspClient {
+  private child?: ChildProcess;
+  private conn?: MessageConnection;
+  private _running = false;
+  private openDocs = new Map&lt;string, string&gt;();      // uri -&gt; last text sent
+  private versions = new Map&lt;string, number&gt;();
+  private waiters = new Map&lt;string, Array&lt;(d: Diagnostic[]) =&gt; void&gt;&gt;();
+  private readyResolve?: () =&gt; void;
+  readonly diagnostics = new Map&lt;string, Diagnostic[]&gt;();
+  readonly stderrTail: string[] = [];
+  notificationCount = 0;
+
+  constructor(private spec: SpawnSpec, private opts: ClientOptions = {}) {}
+
+  get running() { return this._running; }
+  get pid() { return this.child?.pid; }
+  get openDocumentCount() { return this.openDocs.size; }
+
+  async start(rootUri: string): Promise&lt;void&gt; {
+    const child = spawn(this.spec.command, this.spec.args, {
+      cwd: this.spec.cwd, env: { ...process.env, ...this.spec.env },
+      stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+    });
+    this.child = child;
+    child.stderr!.on("data", (b: Buffer) =&gt; {
+      for (const line of b.toString().split(/\r?\n/)) {
+        if (!line) continue;
+        this.stderrTail.push(line);
+        if (this.stderrTail.length &gt; 50) this.stderrTail.shift();
+      }
+    });
+    child.on("exit", () =&gt; { this._running = false; this.openDocs.clear(); this.conn?.dispose(); });
+    const conn = createMessageConnection(
+      new StreamMessageReader(child.stdout!), new StreamMessageWriter(child.stdin!));
+    conn.onNotification((method: string, params: unknown) =&gt; {
+      this.notificationCount++;
+      if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; diagnostics: Diagnostic[] });
+      if (method === "clarion/solutionReady") this.readyResolve?.();
+    });
+    conn.onRequest(() =&gt; null);            // server-to-client requests we do not implement
+    conn.onError(e =&gt; this.stderrTail.push(`jsonrpc error: ${String(e[0])}`));
+    conn.listen();
+    this.conn = conn;
+    this._running = true;
+    await this.request("initialize", { processId: process.pid, rootUri, capabilities: {}, initializationOptions: {} });
+    await this.notify("initialized", {});
+  }
+
+  async openSolution(params: UpdatePathsParams): Promise&lt;boolean&gt; {
+    const ready = new Promise&lt;boolean&gt;(r =&gt; { this.readyResolve = () =&gt; r(true); });
+    await this.notify("clarion/updatePaths", params);
+    return Promise.race([ready, sleep(this.opts.readyTimeoutMs ?? READY_TIMEOUT_MS).then(() =&gt; false)]);
+  }
+
+  request&lt;T = unknown&gt;(method: string, params?: unknown): Promise&lt;T&gt; {
+    if (!this.conn || !this._running) return Promise.reject(new Error("Language server is not running"));
+    const ms = this.opts.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
+    return Promise.race([
+      this.conn.sendRequest(method, params) as Promise&lt;T&gt;,
+      sleep(ms).then(() =&gt; { throw new Error(`${method} timed out after ${ms} ms`); }),
+    ]);
+  }
+
+  notify(method: string, params?: unknown): Promise&lt;void&gt; {
+    if (!this.conn || !this._running) return Promise.reject(new Error("Language server is not running"));
+    return this.conn.sendNotification(method, params);
+  }
+
+  async openDocument(filePath: string): Promise&lt;{ uri: string; changed: boolean }&gt; {
+    const uri = toUri(filePath);
+    const text = readFileSync(filePath, "utf8");
+    const last = this.openDocs.get(uri);
+    if (last === text) return { uri, changed: false };
+    if (last === undefined) {
+      this.versions.set(uri, 1);
+      await this.notify("textDocument/didOpen",
+        { textDocument: { uri, languageId: "clarion", version: 1, text } });
+    } else {
+      const version = (this.versions.get(uri) ?? 1) + 1;
+      this.versions.set(uri, version);
+      await this.notify("textDocument/didChange",
+        { textDocument: { uri, version }, contentChanges: [{ text }] });
+    }
+    this.openDocs.set(uri, text);
+    return { uri, changed: true };
+  }
+
+  waitForDiagnostics(uri: string, ms = this.opts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS)
+      : Promise&lt;Diagnostic[] | undefined&gt; {
+    return new Promise(resolve =&gt; {
+      const remove = () =&gt; this.waiters.set(uri, (this.waiters.get(uri) ?? []).filter(w =&gt; w !== fn));
+      const timer = setTimeout(() =&gt; { remove(); resolve(undefined); }, ms);
+      const fn = (d: Diagnostic[]) =&gt; { clearTimeout(timer); remove(); resolve(d); };
+      this.waiters.set(uri, [...(this.waiters.get(uri) ?? []), fn]);
+    });
+  }
+
+  private onDiagnostics(p: { uri: string; diagnostics: Diagnostic[] }) {
+    this.diagnostics.set(p.uri, p.diagnostics);
+    const list = this.waiters.get(p.uri) ?? [];
+    this.waiters.delete(p.uri);
+    for (const fn of list) fn(p.diagnostics);
+  }
+
+  async stop(): Promise&lt;void&gt; {
+    const child = this.child;
+    if (!child) return;
+    try { if (this._running) { await this.request("shutdown"); await this.notify("exit"); } } catch { /* dying anyway */ }
+    await Promise.race([new Promise&lt;void&gt;(r =&gt; child.once("exit", () =&gt; r())), sleep(2000)]);
+    if (child.exitCode === null) child.kill();
+    this._running = false; this.child = undefined; this.conn = undefined;
+  }
+}</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/lsp.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 6 passed, tsc silent. If the hung-request test passes on "not found" rather than "timed out", that is acceptable: the fake replies with method-not-found, and the real timeout path is exercised by the ready test.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/lsp.ts test/fake-server.mjs test/lsp.test.ts &amp;&amp; git commit -m "Add LspClient over stdio JSON-RPC with a fake server for tests"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 5: Session tools and the executable entry</h2>
+<div class="files">
+  <span>Create:</span> src/tools.ts, test/harness.ts, test/tools.test.ts<br>
+  <span>Modify:</span> src/index.ts (replace placeholder)
+</div>
+<p><strong>Produces:</strong> <code>createSession(opts): Session</code>, <code>registerTools(server, session)</code>, the <code>Session</code> and <code>SessionOptions</code> types, the <code>ok</code>/<code>fail</code> result helpers, and the four state tools: <code>open_solution</code>, <code>lsp_start</code>, <code>get_solution_info</code>, <code>lsp_debug_status</code>. Later tasks append handlers inside <code>registerTools</code>.</p>
+<ol class="steps">
+<li class="step"><strong>Write the test harness</strong>
+<pre><code>// test/harness.ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import path from "node:path";
+import { createSession, registerTools, type Session, type SessionOptions } from "../src/tools.js";
+
+const FAKE = path.resolve("test/fake-server.mjs");
+
+/** Fake Clarion root: never touched on disk; the spawn spec runs the fake server instead. */
+export const fakeRoot = { root: "C:\\FakeClarion", version: "12.0.0", serverDir: "C:\\FakeClarion\\srv",
+  nodeExe: "C:\\FakeClarion\\srv\\node.exe", serverMain: "C:\\FakeClarion\\srv\\server.js" };
+
+export async function connect(env: Record&lt;string, string&gt; = {}, extra: Partial&lt;SessionOptions&gt; = {}) {
+  const session: Session = createSession({
+    cwd: process.cwd(),
+    findRoot: () =&gt; fakeRoot,
+    spawnSpec: () =&gt; ({ command: process.execPath, args: [FAKE], cwd: process.cwd(), env }),
+    clientOpts: { readyTimeoutMs: 2000, requestTimeoutMs: 2000, diagnosticsTimeoutMs: 1000 },
+    ...extra,
+  });
+  const server = new McpServer({ name: "test", version: "0" });
+  registerTools(server, session);
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(a);
+  const client = new Client({ name: "test-client", version: "0" });
+  await client.connect(b);
+  async function call(name: string, args: Record&lt;string, unknown&gt; = {}) {
+    const res = await client.callTool({ name, arguments: args }) as
+      { content: Array&lt;{ type: string; text: string }&gt;; isError?: boolean };
+    return { isError: res.isError === true, data: JSON.parse(res.content[0].text) };
+  }
+  async function close() { await client.close(); await session.client?.stop(); }
+  return { call, close, session };
+}</code></pre>
+</li>
+<li class="step"><strong>Write the failing tests</strong>
+<pre><code>// test/tools.test.ts
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { connect } from "./harness.js";
+
+let dir: string; let h: Awaited&lt;ReturnType&lt;typeof connect&gt;&gt; | undefined;
+function solution() {
+  dir = mkdtempSync(path.join(tmpdir(), "sln-"));
+  const sln = path.join(dir, "App.sln"); writeFileSync(sln, "");
+  return sln;
+}
+afterEach(async () =&gt; { await h?.close(); h = undefined; if (dir) rmSync(dir, { recursive: true, force: true }); });
+
+describe("session tools", () =&gt; {
+  it("refuses every LSP tool before open_solution", async () =&gt; {
+    h = await connect();
+    const r = await h.call("get_solution_info");
+    expect(r.data).toEqual({ solution: null });
+    const d = await h.call("lsp_debug_status");
+    expect(d.data.running).toBe(false);
+  });
+
+  it("opens a solution and reports it", async () =&gt; {
+    h = await connect();
+    const sln = solution();
+    const r = await h.call("open_solution", { solution_path: sln });
+    expect(r.isError).toBe(false);
+    expect(r.data).toMatchObject({ solution: sln, clarionRoot: "C:\\FakeClarion",
+      clarionVersion: "12.0.0", ready: true });
+    expect(r.data.stderrTail).toBeUndefined();
+    const info = await h.call("get_solution_info");
+    expect(info.data).toMatchObject({ solution: sln, ready: true });
+    const d = await h.call("lsp_debug_status");
+    expect(d.data.running).toBe(true);
+    expect(typeof d.data.pid).toBe("number");
+  });
+
+  it("lsp_start opens the single .sln in cwd", async () =&gt; {
+    const sln = solution();
+    h = await connect({}, { cwd: dir });
+    const r = await h.call("lsp_start");
+    expect(r.data.solution).toBe(sln);
+  });
+
+  it("returns stderrTail when the server never becomes ready", async () =&gt; {
+    h = await connect({ FAKE_SLOW: "1" });
+    const r = await h.call("open_solution", { solution_path: solution() });
+    expect(r.isError).toBe(false);
+    expect(r.data.ready).toBe(false);
+    expect(Array.isArray(r.data.stderrTail)).toBe(true);
+  });
+
+  it("returns isError results for bad input instead of throwing", async () =&gt; {
+    h = await connect();
+    const r = await h.call("open_solution", { solution_path: "C:\\nope\\Missing.sln" });
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toMatch(/not found/);
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/tools.test.ts</p>
+<p><b>Expected:</b> FAIL, cannot resolve <code>../src/tools.js</code>.</p>
+</li>
+<li class="step"><strong>Write src/tools.ts</strong>
+<pre><code>// src/tools.ts
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { findClarionRoot, findSolution, buildPaths,
+         type ClarionRoot, type UpdatePathsParams } from "./clarion.js";
+import { LspClient, type SpawnSpec, type ClientOptions } from "./lsp.js";
+
+export interface SessionOptions {
+  cwd: string;
+  findRoot: (override?: string) =&gt; ClarionRoot;
+  spawnSpec: (c: ClarionRoot) =&gt; SpawnSpec;
+  clientOpts: ClientOptions;
+}
+export interface Session {
+  opts: SessionOptions;
+  clarion?: ClarionRoot;
+  solution?: string;
+  params?: UpdatePathsParams;
+  ready: boolean;
+  client?: LspClient;
+}
+
+export function createSession(overrides: Partial&lt;SessionOptions&gt; = {}): Session {
+  return {
+    ready: false,
+    opts: {
+      cwd: process.cwd(),
+      findRoot: override =&gt; findClarionRoot({ override }),
+      spawnSpec: c =&gt; ({ command: c.nodeExe, args: [c.serverMain, "--stdio"], cwd: c.serverDir }),
+      clientOpts: {},
+      ...overrides,
+    },
+  };
+}
+
+type ToolResult = { content: Array&lt;{ type: "text"; text: string }&gt;; isError?: boolean };
+export const ok = (data: unknown): ToolResult =&gt;
+  ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
+export const fail = (message: string): ToolResult =&gt;
+  ({ content: [{ type: "text", text: JSON.stringify({ error: message }) }], isError: true });
+const msg = (e: unknown) =&gt; (e instanceof Error ? e.message : String(e));
+
+async function startClient(s: Session): Promise&lt;void&gt; {
+  await s.client?.stop();
+  const client = new LspClient(s.opts.spawnSpec(s.clarion!), s.opts.clientOpts);
+  s.client = client;
+  await client.start(pathToFileURL(path.dirname(s.solution!)).href);
+  s.ready = await client.openSolution(s.params!);
+}
+
+async function openSolution(s: Session, args: { solution_path?: string; configuration?: string; clarion_root?: string }) {
+  const solution = findSolution(args.solution_path, s.opts.cwd);
+  const clarion = s.opts.findRoot(args.clarion_root);
+  const params = buildPaths(clarion, solution, args.configuration ?? "Debug");
+  const sameSolution = s.client?.running &amp;&amp; s.solution === solution &amp;&amp; s.clarion?.root === clarion.root;
+  s.solution = solution; s.clarion = clarion; s.params = params;
+  if (sameSolution) s.ready = await s.client!.openSolution(params);
+  else await startClient(s);
+  return {
+    solution, clarionRoot: clarion.root, clarionVersion: clarion.version,
+    redirectionFile: params.redirectionFile, ready: s.ready,
+    ...(s.ready ? {} : { stderrTail: [...s.client!.stderrTail] }),
+  };
+}
+
+export function registerTools(server: McpServer, s: Session): void {
+  server.registerTool("open_solution", {
+    description: "Open a Clarion solution and start the language server. Call this first. " +
+      "With no solution_path, uses the single .sln in the working directory.",
+    inputSchema: {
+      solution_path: z.string().optional().describe("Absolute path to the .sln"),
+      configuration: z.string().optional().describe("Debug (default) or Release"),
+      clarion_root: z.string().optional().describe("Clarion install folder; overrides auto-detection"),
+    },
+  }, async args =&gt; { try { return ok(await openSolution(s, args)); } catch (e) { return fail(msg(e)); } });
+
+  server.registerTool("lsp_start", {
+    description: "Start the Clarion Language Server for the solution in the working directory. " +
+      "Same as open_solution with no arguments.",
+  }, async () =&gt; { try { return ok(await openSolution(s, {})); } catch (e) { return fail(msg(e)); } });
+
+  server.registerTool("get_solution_info", {
+    description: "Get the currently open solution, Clarion version, and redirection file.",
+  }, async () =&gt; ok(s.solution
+    ? { solution: s.solution, clarionVersion: s.clarion!.version,
+        redirectionFile: s.params!.redirectionFile, ready: s.ready }
+    : { solution: null }));
+
+  server.registerTool("lsp_debug_status", {
+    description: "Debug tool: language server process state, notification counts, open documents, " +
+      "cached diagnostics, and the last server stderr lines.",
+  }, async () =&gt; ok({
+    running: s.client?.running ?? false, pid: s.client?.pid ?? null, solution: s.solution ?? null,
+    ready: s.ready, notifications: s.client?.notificationCount ?? 0,
+    openDocuments: s.client?.openDocumentCount ?? 0, diagnosticsCached: s.client?.diagnostics.size ?? 0,
+    stderrTail: s.client ? [...s.client.stderrTail] : [],
+  }));
+}</code></pre>
+</li>
+<li class="step"><strong>Replace src/index.ts</strong>
+<pre><code>#!/usr/bin/env node
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createSession, registerTools } from "./tools.js";
+
+const session = createSession();
+const server = new McpServer({ name: "clarion-lsp-mcp", version: "0.1.0" }, {
+  instructions: "Call open_solution (or lsp_start) before any lsp_* tool. Lines and characters " +
+    "are zero-based. File paths are absolute Windows paths. lsp_rename returns edits and never applies them.",
+});
+registerTools(server, session);
+
+const shutdown = () =&gt; { void (session.client?.stop() ?? Promise.resolve()).finally(() =&gt; process.exit(0)); };
+server.server.onclose = shutdown;
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+await server.connect(new StdioServerTransport());</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/tools.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 5 passed, tsc silent.</p>
+</li>
+<li class="step"><strong>Smoke the executable over real stdio</strong>
+<p class="run">npm run build<br>node dist/index.js &lt; NUL</p>
+<p><b>Expected:</b> the process exits 0 within a second when stdin closes, printing nothing to stdout.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/tools.ts src/index.ts test/harness.ts test/tools.test.ts &amp;&amp; git commit -m "Add MCP session tools: open_solution, lsp_start, get_solution_info, lsp_debug_status"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 6: Position tools</h2>
+<div class="files">
+  <span>Modify:</span> src/tools.ts (append inside registerTools, plus helpers), test/tools.test.ts (append)
+</div>
+<p><strong>Produces:</strong> <code>lsp_definition</code>, <code>lsp_references</code>, <code>lsp_hover</code>, <code>lsp_document_symbols</code>, <code>lsp_find_symbol</code>, <code>lsp_rename</code>, and the <code>withClient(s, fn)</code> guard that every LSP-backed tool uses. In this task <code>withClient</code> only checks that a solution is open; Task 8 adds restart.</p>
+<ol class="steps">
+<li class="step"><strong>Append the failing tests</strong>
+<pre><code>// test/tools.test.ts (append)
+describe("position tools", () =&gt; {
+  async function opened() {
+    h = await connect();
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n  CODE\n");
+    await h.call("open_solution", { solution_path: sln });
+    return file;
+  }
+  const at = (file_path: string) =&gt; ({ file_path, line: 1, character: 2 });
+
+  it("refuses when no solution is open", async () =&gt; {
+    h = await connect();
+    const r = await h.call("lsp_hover", { file_path: "C:\\x.clw", line: 0, character: 0 });
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toMatch(/open_solution/);
+  });
+
+  it("refuses a file that does not exist without touching the server", async () =&gt; {
+    await opened();
+    const before = (await h!.call("lsp_debug_status")).data.openDocuments;
+    const r = await h!.call("lsp_hover", { file_path: path.join(dir, "missing.clw"), line: 0, character: 0 });
+    expect(r.isError).toBe(true);
+    expect((await h!.call("lsp_debug_status")).data.openDocuments).toBe(before);
+  });
+
+  it("maps definition, references and hover to paths", async () =&gt; {
+    const file = await opened();
+    expect((await h!.call("lsp_definition", at(file))).data)
+      .toEqual([{ file_path: file, line: 3, character: 2 }]);
+    expect((await h!.call("lsp_references", at(file))).data)
+      .toEqual([{ file_path: file, line: 3, character: 2 }, { file_path: file, line: 7, character: 4 }]);
+    expect((await h!.call("lsp_hover", at(file))).data).toEqual({ contents: "hover 1:2" });
+  });
+
+  it("flattens document symbols and finds workspace symbols", async () =&gt; {
+    const file = await opened();
+    expect((await h!.call("lsp_document_symbols", { file_path: file })).data).toEqual([
+      { name: "Main", kind: 12, line: 1, character: 0, container: null },
+      { name: "Counter", kind: 13, line: 2, character: 2, container: "Main" },
+    ]);
+    expect((await h!.call("lsp_find_symbol", { query: "Greet" })).data)
+      .toEqual([{ name: "Greet", kind: 12, file_path: "C:\\fake\\main.clw", line: 1 }]);
+  });
+
+  it("returns rename edits without applying them, and an error when impossible", async () =&gt; {
+    const file = await opened();
+    const before = readFileSync(file, "utf8");
+    const r = await h!.call("lsp_rename", { ...at(file), new_name: "Greeting" });
+    expect(r.data).toEqual({ edits: [
+      { file_path: file, line: 3, character: 2, endLine: 3, endCharacter: 6, newText: "Greeting" } ] });
+    expect(readFileSync(file, "utf8")).toBe(before);
+    const bad = await h!.call("lsp_rename", { ...at(file), new_name: "!" });
+    expect(bad.data.error).toMatch(/cannot be renamed/);
+  });
+});</code></pre>
+<p>Add <code>readFileSync</code> to the <code>node:fs</code> import at the top of the test file.</p>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/tools.test.ts</p>
+<p><b>Expected:</b> the five new tests FAIL with "tool not found" style errors from the SDK.</p>
+</li>
+<li class="step"><strong>Add helpers and the six tools to src/tools.ts</strong>
+<p>Add these imports at the top: <code>import { existsSync } from "node:fs";</code> and extend the lsp import to <code>{ LspClient, toUri, fromUri, type SpawnSpec, type ClientOptions, type Range }</code>. Then add, above <code>registerTools</code>:</p>
+<pre><code>export async function withClient&lt;T&gt;(s: Session, fn: (c: LspClient) =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  if (!s.solution || !s.params || !s.client) throw new Error("No solution open. Call open_solution first.");
+  return fn(s.client);
+}
+
+function checkFile(file_path: string): string {
+  const p = path.resolve(file_path);
+  if (!existsSync(p)) throw new Error(`File not found: ${p}`);
+  return p;
+}
+
+const pos = { file_path: z.string(), line: z.number().int().min(0), character: z.number().int().min(0) };
+type Loc = { uri: string; range: Range } | { targetUri: string; targetRange: Range };
+const locToPath = (l: Loc) =&gt; "targetUri" in l
+  ? { file_path: fromUri(l.targetUri), line: l.targetRange.start.line, character: l.targetRange.start.character }
+  : { file_path: fromUri(l.uri), line: l.range.start.line, character: l.range.start.character };
+const asArray = &lt;T,&gt;(v: T | T[] | null | undefined): T[] =&gt; (v == null ? [] : Array.isArray(v) ? v : [v]);
+
+interface DocSymbol { name: string; kind: number; selectionRange?: Range; range?: Range; children?: DocSymbol[];
+                      location?: { range: Range }; containerName?: string; }
+function flatten(symbols: DocSymbol[], container: string | null = null): Array&lt;Record&lt;string, unknown&gt;&gt; {
+  return symbols.flatMap(sym =&gt; {
+    const r = sym.selectionRange ?? sym.range ?? sym.location?.range;
+    const row = { name: sym.name, kind: sym.kind, line: r?.start.line ?? 0, character: r?.start.character ?? 0,
+                  container: sym.containerName ?? container };
+    return [row, ...flatten(sym.children ?? [], sym.name)];
+  });
+}
+
+function hoverText(h: { contents: unknown } | null): string {
+  if (!h) return "";
+  const c = h.contents as string | { value: string } | Array&lt;string | { value: string }&gt;;
+  const one = (x: string | { value: string }) =&gt; (typeof x === "string" ? x : x.value);
+  return Array.isArray(c) ? c.map(one).join("\n") : one(c);
+}
+
+/** Position request against a file: opens the document first, then sends the request. */
+async function positional&lt;T&gt;(s: Session, method: string,
+    a: { file_path: string; line: number; character: number }, extra: Record&lt;string, unknown&gt; = {}) {
+  const file = checkFile(a.file_path);
+  return withClient(s, async c =&gt; {
+    const { uri } = await c.openDocument(file);
+    return c.request&lt;T&gt;(method, { textDocument: { uri }, position: { line: a.line, character: a.character }, ...extra });
+  });
+}</code></pre>
+<p>Then append inside <code>registerTools</code>, after <code>lsp_debug_status</code>:</p>
+<pre><code>  const guard = (fn: () =&gt; Promise&lt;unknown&gt;) =&gt; async () =&gt; {
+    try { return ok(await fn()); } catch (e) { return fail(msg(e)); }
+  };
+
+  server.registerTool("lsp_definition", {
+    description: "Go to definition: where the symbol at a position is defined (cross-file). Zero-based line/character.",
+    inputSchema: pos,
+  }, async a =&gt; guard(async () =&gt; asArray(await positional&lt;Loc | Loc[]&gt;(s, "textDocument/definition", a)).map(locToPath))());
+
+  server.registerTool("lsp_references", {
+    description: "Find all references to the symbol at a position across the workspace.",
+    inputSchema: pos,
+  }, async a =&gt; guard(async () =&gt; asArray(await positional&lt;Loc[]&gt;(s, "textDocument/references", a,
+      { context: { includeDeclaration: true } })).map(locToPath))());
+
+  server.registerTool("lsp_hover", {
+    description: "Type info, signature, and documentation for the symbol at a position.",
+    inputSchema: pos,
+  }, async a =&gt; guard(async () =&gt;
+      ({ contents: hoverText(await positional&lt;{ contents: unknown } | null&gt;(s, "textDocument/hover", a)) }))());
+
+  server.registerTool("lsp_document_symbols", {
+    description: "All symbols in a file: procedures, classes, variables. Flattened with a container name.",
+    inputSchema: { file_path: z.string() },
+  }, async a =&gt; guard(async () =&gt; {
+    const file = checkFile(a.file_path);
+    return withClient(s, async c =&gt; {
+      const { uri } = await c.openDocument(file);
+      return flatten(asArray(await c.request&lt;DocSymbol[]&gt;("textDocument/documentSymbol", { textDocument: { uri } })));
+    });
+  })());
+
+  server.registerTool("lsp_find_symbol", {
+    description: "Search symbols across the workspace by name.",
+    inputSchema: { query: z.string() },
+  }, async a =&gt; guard(async () =&gt; withClient(s, async c =&gt;
+    asArray(await c.request&lt;DocSymbol[]&gt;("workspace/symbol", { query: a.query })).map(sym =&gt; ({
+      name: sym.name, kind: sym.kind, file_path: fromUri((sym.location as { uri: string }).uri),
+      line: sym.location!.range.start.line }))))());
+
+  server.registerTool("lsp_rename", {
+    description: "Propose renaming the symbol at a position. Returns the edit list and does NOT apply it.",
+    inputSchema: { ...pos, new_name: z.string().min(1) },
+  }, async a =&gt; guard(async () =&gt; {
+    type Edit = { range: Range; newText: string };
+    type WsEdit = { changes?: Record&lt;string, Edit[]&gt;;
+                    documentChanges?: Array&lt;{ textDocument: { uri: string }; edits: Edit[] }&gt; } | null;
+    const we = await positional&lt;WsEdit&gt;(s, "textDocument/rename", a, { newName: a.new_name });
+    if (!we) return { error: "Symbol at this position cannot be renamed." };
+    const rows: Array&lt;Record&lt;string, unknown&gt;&gt; = [];
+    const push = (uri: string, edits: Edit[]) =&gt; edits.forEach(e =&gt; rows.push({
+      file_path: fromUri(uri), line: e.range.start.line, character: e.range.start.character,
+      endLine: e.range.end.line, endCharacter: e.range.end.character, newText: e.newText }));
+    for (const [uri, edits] of Object.entries(we.changes ?? {})) push(uri, edits);
+    for (const dc of we.documentChanges ?? []) if ("edits" in dc) push(dc.textDocument.uri, dc.edits);
+    return { edits: rows };
+  })());</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/tools.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 10 passed, tsc silent. If <code>registerTool</code> complains about the callback type for tools without an <code>inputSchema</code>, give those callbacks no parameters, as in Task 5.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/tools.ts test/tools.test.ts &amp;&amp; git commit -m "Add position tools: definition, references, hover, symbols, rename"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 7: Diagnostics and project source files</h2>
+<div class="files">
+  <span>Modify:</span> src/tools.ts (append inside registerTools), test/tools.test.ts (append)
+</div>
+<p><strong>Produces:</strong> <code>lsp_diagnostics</code> and <code>get_project_source_files</code>.</p>
+<ol class="steps">
+<li class="step"><strong>Append the failing tests</strong>
+<pre><code>// test/tools.test.ts (append)
+describe("diagnostics and project files", () =&gt; {
+  it("returns cached diagnostics for an unchanged file and fresh ones after an edit", async () =&gt; {
+    h = await connect();
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data)
+      .toEqual({ pending: false, count: 0, diagnostics: [] });
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data.pending).toBe(false);
+    writeFileSync(file, "  BAD\n");
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: false, count: 1,
+      diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
+  });
+
+  it("reports pending:true when no diagnostics arrive in time", async () =&gt; {
+    h = await connect({ FAKE_SLOW: "1" });   // fake never publishes because it never indexes
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    h.session.client!.diagnostics.clear();
+    // Force a wait with nothing to answer it: open a doc the fake will not diagnose.
+    // FAKE_SLOW does not stop publishing, so instead shorten the wait to zero and use a fresh file:
+    writeFileSync(file, "  X\n");
+    const c = h.session.client!;
+    const origWait = c.waitForDiagnostics.bind(c);
+    c.waitForDiagnostics = (uri) =&gt; origWait(uri, 0);
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: true, count: 0, diagnostics: [] });
+  });
+
+  it("lists absolute .clw/.inc paths per project, resolves redirected files, and reports unresolved ones", async () =&gt; {
+    const sln = solution();
+    writeFileSync(path.join(dir, "main.clw"), "");
+    const redirDir = mkdtempSync(path.join(tmpdir(), "redir-"));
+    const redir = path.join(redirDir, "redir.inc"); writeFileSync(redir, "");
+    h = await connect({ FAKE_PROJECT_DIR: dir, FAKE_REDIR_PATH: redir });
+    await h.call("open_solution", { solution_path: sln });
+    const r = (await h.call("get_project_source_files")).data;
+    expect(r).toEqual([{ project: "Fake", files: [path.join(dir, "main.clw"), redir], unresolved: ["ghost.inc"] }]);
+    rmSync(redirDir, { recursive: true, force: true });
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/tools.test.ts</p>
+<p><b>Expected:</b> the three new tests FAIL, tools not found.</p>
+</li>
+<li class="step"><strong>Append the two tools inside registerTools</strong>
+<pre><code>  server.registerTool("lsp_diagnostics", {
+    description: "Current errors and warnings for a file. pending:true means the server has not answered " +
+      "within 3 seconds; treat that as unknown, not clean.",
+    inputSchema: { file_path: z.string() },
+  }, async a =&gt; guard(async () =&gt; {
+    const file = checkFile(a.file_path);
+    return withClient(s, async c =&gt; {
+      const { uri, changed } = await c.openDocument(file);
+      const list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
+      if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
+      const diagnostics = list.map(d =&gt; ({ severity: d.severity ?? 1, line: d.range.start.line,
+        character: d.range.start.character, message: d.message }));
+      return { pending: false, count: diagnostics.length, diagnostics };
+    });
+  })());
+
+  server.registerTool("get_project_source_files", {
+    description: "All .clw and .inc files in the open solution, absolute paths grouped by project.",
+  }, async () =&gt; guard(async () =&gt; withClient(s, async c =&gt; {
+    type Project = { name: string; path: string; guid: string };
+    type ProjFile = { name: string; relativePath: string };
+    const tree = await c.request&lt;{ projects: Project[] }&gt;("clarion/getSolutionTree");
+    const out = [];
+    for (const p of tree.projects) {
+      const { files } = await c.request&lt;{ files: ProjFile[] }&gt;("clarion/getProjectFiles", { projectGuid: p.guid });
+      const resolved: string[] = [], unresolved: string[] = [];
+      for (const f of files) {
+        if (!/\.(clw|inc)$/i.test(f.name)) continue;
+        const direct = path.join(p.path, f.relativePath);
+        if (existsSync(direct)) { resolved.push(direct); continue; }
+        const hit = await c.request&lt;{ path?: string } | null&gt;("clarion/findFile", { filename: f.name });
+        if (hit?.path &amp;&amp; existsSync(hit.path)) resolved.push(hit.path); else unresolved.push(f.name);
+      }
+      out.push({ project: p.name, files: resolved, unresolved });
+    }
+    return out;
+  }))());</code></pre>
+</li>
+<li class="step"><strong>Run to verify they pass</strong>
+<p class="run">npx vitest run test/tools.test.ts &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> 13 passed, tsc silent.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/tools.ts test/tools.test.ts &amp;&amp; git commit -m "Add lsp_diagnostics and get_project_source_files"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 8: Crash recovery</h2>
+<div class="files">
+  <span>Modify:</span> src/tools.ts (withClient), test/tools.test.ts (append)
+</div>
+<p><strong>Produces:</strong> <code>withClient</code> restarts a dead server with the full handshake and retries the operation once.</p>
+<ol class="steps">
+<li class="step"><strong>Append the failing test</strong>
+<pre><code>// test/tools.test.ts (append)
+describe("crash recovery", () =&gt; {
+  it("restarts the server after a crash and retries once, surfacing stderr on a second failure", async () =&gt; {
+    h = await connect();
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const pid1 = (await h.call("lsp_debug_status")).data.pid;
+    h.session.client!["child"]!.kill();                     // simulate a crash
+    await new Promise(r =&gt; setTimeout(r, 300));
+    expect((await h.call("lsp_debug_status")).data.running).toBe(false);
+    const r = await h.call("lsp_hover", { file_path: file, line: 0, character: 0 });
+    expect(r.isError).toBe(false);
+    expect(r.data).toEqual({ contents: "hover 0:0" });
+    const pid2 = (await h.call("lsp_debug_status")).data.pid;
+    expect(pid2).not.toBe(pid1);
+    expect((await h.call("get_solution_info")).data.ready).toBe(true);
+  });
+
+  it("gives up after the retry and includes stderr", async () =&gt; {
+    h = await connect({ FAKE_CRASH_ON_HOVER: "1" });
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const r = await h.call("lsp_hover", { file_path: file, line: 0, character: 0 });
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toMatch(/after restart/);
+    expect(Array.isArray(r.data.stderrTail)).toBe(true);
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run to verify they fail</strong>
+<p class="run">npx vitest run test/tools.test.ts -t "crash recovery"</p>
+<p><b>Expected:</b> both FAIL: the first with "Language server is not running", the second because the error lacks "after restart".</p>
+</li>
+<li class="step"><strong>Replace withClient in src/tools.ts</strong>
+<pre><code>export async function withClient&lt;T&gt;(s: Session, fn: (c: LspClient) =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  if (!s.solution || !s.params || !s.client) throw new Error("No solution open. Call open_solution first.");
+  if (!s.client.running) await startClient(s);
+  try {
+    return await fn(s.client);
+  } catch (e) {
+    if (s.client.running) throw e;                 // a real answer from a live server
+    await startClient(s);                          // full handshake + updatePaths
+    try {
+      return await fn(s.client);
+    } catch (e2) {
+      const tail = s.client.stderrTail.join("\n");
+      throw new Error(`Language server failed again after restart: ${msg(e2)}\nstderrTail:\n${tail}`);
+    }
+  }
+}</code></pre>
+<p>And make <code>fail</code> carry the tail as data when present, so the second test can read it:</p>
+<pre><code>export const fail = (message: string): ToolResult =&gt; {
+  const [error, tail] = message.split("\nstderrTail:\n");
+  const body = tail === undefined ? { error } : { error, stderrTail: tail.split("\n") };
+  return { content: [{ type: "text", text: JSON.stringify(body) }], isError: true };
+};</code></pre>
+<p>Note the crash test kills the child directly; because <code>openDocs</code> is cleared on exit, the retried <code>openDocument</code> re-sends <code>didOpen</code>, which is the "re-opens the requested document" behaviour the spec requires.</p>
+</li>
+<li class="step"><strong>Run the whole suite to verify they pass and nothing regressed</strong>
+<p class="run">npx vitest run &amp;&amp; npx tsc --noEmit</p>
+<p><b>Expected:</b> all tests pass (clarion 10, lsp 6, tools 15), tsc silent.</p>
+</li>
+<li class="step"><strong>Commit</strong>
+<p class="run">git add src/tools.ts test/tools.test.ts &amp;&amp; git commit -m "Restart the language server after a crash and retry once"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<section class="task">
+<h2>Task 9: Real-server integration test, README, package check, final pass</h2>
+<div class="files">
+  <span>Create:</span> test/fixtures/HelloLsp/HelloLsp.sln, test/fixtures/HelloLsp/HelloLsp.cwproj, test/fixtures/HelloLsp/main.clw, test/integration.test.ts, README.md
+</div>
+<p><strong>Produces:</strong> proof against the real Clarion 12 server, install docs for each host, a clean <code>npm pack</code>, and the final simplified commit.</p>
+<ol class="steps">
+<li class="step"><strong>Write the fixture solution</strong>
+<pre><code>// test/fixtures/HelloLsp/HelloLsp.sln
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{12B76EC0-1D7B-4FA7-A7D0-C524288B48A1}") = "HelloLsp", "HelloLsp.cwproj", "{6F1E2C3A-0B1D-4E5F-9A8B-7C6D5E4F3A2B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+	EndGlobalSection
+EndGlobal
+
+// test/fixtures/HelloLsp/HelloLsp.cwproj
+&lt;Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;ProjectGuid&gt;{6F1E2C3A-0B1D-4E5F-9A8B-7C6D5E4F3A2B}&lt;/ProjectGuid&gt;
+    &lt;Configuration Condition=" '$(Configuration)' == '' "&gt;Debug&lt;/Configuration&gt;
+    &lt;Platform Condition=" '$(Platform)' == '' "&gt;Win32&lt;/Platform&gt;
+    &lt;OutputType&gt;Exe&lt;/OutputType&gt;
+    &lt;AssemblyName&gt;HelloLsp&lt;/AssemblyName&gt;
+    &lt;OutputName&gt;HelloLsp&lt;/OutputName&gt;
+  &lt;/PropertyGroup&gt;
+  &lt;ItemGroup&gt;
+    &lt;Compile Include="main.clw" /&gt;
+  &lt;/ItemGroup&gt;
+  &lt;Import Project="$(ClarionBinPath)\SoftVelocity.Build.Clarion.targets" /&gt;
+&lt;/Project&gt;
+
+// test/fixtures/HelloLsp/main.clw
+  PROGRAM
+
+  MAP
+Greet PROCEDURE(STRING pName),STRING
+  END
+
+Counter LONG
+
+  CODE
+  Counter = 1
+  MESSAGE(Greet('World'))
+
+Greet PROCEDURE(STRING pName)
+  CODE
+  RETURN 'Hello ' &amp; pName</code></pre>
+</li>
+<li class="step"><strong>Write the integration test</strong>
+<pre><code>// test/integration.test.ts
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { cpSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { findClarionRoot } from "../src/clarion.js";
+import { connect } from "./harness.js";
+
+let clarion: ReturnType&lt;typeof findClarionRoot&gt; | undefined;
+try { clarion = findClarionRoot(); } catch { clarion = undefined; }
+
+describe.skipIf(!clarion)("real Clarion language server", () =&gt; {
+  let dir: string; let h: Awaited&lt;ReturnType&lt;typeof connect&gt;&gt;; let main: string;
+  beforeAll(async () =&gt; {
+    dir = mkdtempSync(path.join(tmpdir(), "hello-"));
+    cpSync(path.resolve("test/fixtures/HelloLsp"), dir, { recursive: true });
+    main = path.join(dir, "main.clw");
+    h = await connect({}, {
+      findRoot: () =&gt; clarion!,
+      spawnSpec: c =&gt; ({ command: c.nodeExe, args: [c.serverMain, "--stdio"], cwd: c.serverDir }),
+      clientOpts: {},
+    });
+    const r = await h.call("open_solution", { solution_path: path.join(dir, "HelloLsp.sln") });
+    expect(r.isError, JSON.stringify(r.data)).toBe(false);
+    expect(r.data.ready, JSON.stringify(r.data.stderrTail)).toBe(true);
+  });
+  afterAll(async () =&gt; { await h?.close(); rmSync(dir, { recursive: true, force: true }); });
+
+  it("lists the fixture's source file", async () =&gt; {
+    const r = (await h.call("get_project_source_files")).data;
+    expect(r[0].files.map((f: string) =&gt; f.toLowerCase())).toContain(main.toLowerCase());
+  });
+
+  it("returns document symbols including Greet", async () =&gt; {
+    const r = (await h.call("lsp_document_symbols", { file_path: main })).data;
+    expect(r.map((s: { name: string }) =&gt; s.name.toLowerCase())).toContain("greet");
+  });
+
+  it("resolves a definition across the MAP", async () =&gt; {
+    const r = (await h.call("lsp_definition", { file_path: main, line: 10, character: 11 })).data;
+    expect(r.length).toBeGreaterThan(0);
+    expect(r[0].file_path.toLowerCase()).toBe(main.toLowerCase());
+  });
+
+  it("reports an error for a missing include after an edit", async () =&gt; {
+    const clean = (await h.call("lsp_diagnostics", { file_path: main })).data;
+    expect(clean.pending).toBe(false);
+    writeFileSync(main, readFileSync(main, "utf8").replace("  PROGRAM", "  PROGRAM\n  INCLUDE('DoesNotExist.inc'),ONCE"));
+    let r = (await h.call("lsp_diagnostics", { file_path: main })).data;
+    if (r.pending) r = (await h.call("lsp_diagnostics", { file_path: main })).data;   // one retry, as the skill does
+    expect(r.count).toBeGreaterThan(0);
+  });
+
+  it("survives a kill", async () =&gt; {
+    h.session.client!["child"]!.kill();
+    await new Promise(r =&gt; setTimeout(r, 500));
+    const r = await h.call("lsp_hover", { file_path: main, line: 6, character: 0 });
+    expect(r.isError, JSON.stringify(r.data)).toBe(false);
+  });
+});</code></pre>
+</li>
+<li class="step"><strong>Run it against the local Clarion 12</strong>
+<p class="run">npx vitest run test/integration.test.ts</p>
+<p><b>Expected:</b> 5 passed. If <code>open_solution</code> returns <code>ready:false</code>, read <code>stderrTail</code> in the failure message: the two known risks are the redirection file choice (add a <code>redirection_file</code> argument to <code>open_solution</code> and <code>buildPaths</code> if the server logs missing includes) and URI casing (if the server ignores <code>file:///C:/...</code>, lower-case the drive letter in <code>toUri</code> and keep <code>fromUri</code> unchanged). Fix the root cause in the earlier task's file, keep its tests green, and note the decision in the implementation notes.</p>
+<p>Also confirm the skip path: <code>set CLARION_ROOT=C:\nope &amp;&amp; npx vitest run test/integration.test.ts</code> must report the suite as skipped, not failed. (<code>findClarionRoot</code> throws on a bad override, which the test's try/catch turns into a skip.)</p>
+</li>
+<li class="step"><strong>Write README.md</strong>
+<pre><code># clarion-lsp-mcp
+
+An MCP server that gives AI coding agents the Clarion Assistant language server
+without the Clarion IDE running. Go to definition, references, hover, symbols,
+diagnostics, and rename proposals for any Clarion solution.
+
+## Requirements
+
+- Windows, Node 20 or newer.
+- A Clarion install (11.1, 12, ...) with the Clarion Assistant addin. The server
+  looks for `C:\Clarion*\accessory\addins\ClarionAssistant\lsp-server`. Set
+  `CLARION_ROOT` to the install folder if yours lives elsewhere.
+
+## Install
+
+Claude Code:
+
+    claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp
+
+Codex CLI (`~/.codex/config.toml`):
+
+    [mcp_servers.clarion-lsp]
+    command = "cmd"
+    args = ["/c", "npx", "-y", "clarion-lsp-mcp"]
+
+Any other host that launches stdio MCP servers from JSON:
+
+    { "mcpServers": { "clarion-lsp": { "command": "cmd", "args": ["/c", "npx", "-y", "clarion-lsp-mcp"] } } }
+
+`cmd /c` is there because `npx` is a batch file on Windows and some hosts
+cannot launch it directly.
+
+## Use
+
+Tell the agent to call `open_solution` with the path to your `.sln`. With no
+path it uses the single `.sln` in the working directory. Then the `lsp_*` tools
+work: `lsp_definition`, `lsp_references`, `lsp_hover`, `lsp_document_symbols`,
+`lsp_find_symbol`, `lsp_diagnostics`, `lsp_rename`, `lsp_debug_status`, plus
+`get_solution_info` and `get_project_source_files`. Lines and characters are
+zero-based. `lsp_rename` only proposes edits; nothing is written to disk.
+
+## Troubleshooting
+
+`open_solution` returns `ready: false` with a `stderrTail`: the server started
+but did not finish indexing in 30 seconds. Big solutions keep indexing in the
+background and later calls work. If the tail mentions missing paths, check the
+`.red` file beside your `.sln`. `lsp_debug_status` shows the same tail any time.</code></pre>
+</li>
+<li class="step"><strong>Verify the package contents</strong>
+<p class="run">npm run build &amp;&amp; npm pack --dry-run</p>
+<p><b>Expected:</b> the file list contains only <code>dist/*.js</code>, <code>README.md</code>, <code>LICENSE</code>, <code>package.json</code>. No <code>src</code>, no <code>test</code>.</p>
+</li>
+<li class="step"><strong>Manual proof with the IDE closed</strong>
+<p class="run">claude mcp add clarion-lsp -- node C:\Projects\GitHub\clarion-lsp-mcp\dist\index.js</p>
+<p>In a Claude Code session started in a real Clarion solution folder, with the Clarion IDE closed, run <code>/lsp-diagnostics</code> from the clarion-assistant plugin. <b>Expected:</b> the skill calls <code>get_solution_info</code>, <code>lsp_start</code> (or finds the solution already open), <code>get_project_source_files</code>, and <code>lsp_diagnostics</code> per file, and prints its summary without any tool-not-found error. Record the solution used and the result in the implementation notes.</p>
+</li>
+<li class="step"><strong>Run /simplify and re-run everything</strong>
+<p>Invoke the <code>simplify</code> skill on the full diff. Apply its fixes. Then:</p>
+<p class="run">npx tsc --noEmit &amp;&amp; npx vitest run</p>
+<p><b>Expected:</b> tsc silent, every test green including the integration suite.</p>
+</li>
+<li class="step"><strong>Final commit</strong>
+<p class="run">git add -A &amp;&amp; git commit -m "Add real-server integration test, README, and package check"</p>
+</li>
+</ol>
+</section>
+
+<!-- ================================================================ -->
+<h2>Risks the implementer should expect</h2>
+<ul>
+  <li><strong>URI form.</strong> The server was written for VS Code, which sends <code>file:///c%3A/...</code>. Node's <code>pathToFileURL</code> sends <code>file:///C:/...</code>. The integration test in Task 9 is the first place this shows. Fix in <code>toUri</code> only.</li>
+  <li><strong>Redirection file.</strong> The spec's heuristic may not match what the IDE passes. Task 9 explains the fallback: an explicit argument, not a smarter guess.</li>
+  <li><strong>Server-to-client requests.</strong> The client answers any unknown request with <code>null</code>. If the server asks for <code>workspace/configuration</code> and treats <code>null</code> as fatal, declare no workspace capabilities (already the case) and look at <code>stderrTail</code>.</li>
+  <li><strong>Long timers in tests.</strong> The fake server exits on <code>exit</code>; every test's <code>afterEach</code> calls <code>stop()</code>. A test that forgets this leaves a child running and vitest hangs. The harness's <code>close()</code> handles it.</li>
+</ul>
+
+<h2>Self-review</h2>
+<ul>
+  <li><strong>Spec coverage.</strong> Finding Clarion (T2), solution and payload (T3), client with handshake, document sync, diagnostics cache, stderr ring, stop (T4), all twelve tools (T5, T6, T7), error contract with <code>isError</code> and the no-solution guard (T5, T6), crash restart with full handshake and one retry (T8), timeouts as timeouts not empties (T4, T7), integration test that skips without Clarion (T9), README with per-host snippets (T9), <code>npm pack</code> check (T9), manual <code>/lsp-diagnostics</code> proof (T9). Nothing in the spec is without a task.</li>
+  <li><strong>Placeholders.</strong> None. Every step carries its code or its exact command.</li>
+  <li><strong>Type consistency.</strong> <code>ClarionRoot</code>, <code>UpdatePathsParams</code> (T2, T3) are what <code>LspClient.openSolution</code> (T4) and <code>createSession</code> (T5) consume. <code>openDocument</code> returns <code>{ uri, changed }</code> in T4 and is used that way in T6 and T7. <code>withClient</code> has the same signature in T6 and T8. <code>SessionOptions.findRoot</code> takes an optional override in T5 and the harness and integration test pass matching functions.</li>
+  <li><strong>Ablation.</strong> <code>FindRootOptions.drive</code> and <code>readVersion</code> injection: needed by T2's tests, which cannot create <code>C:\Clarion*</code>. <code>SessionOptions.findRoot</code> and <code>spawnSpec</code>: needed by T5's harness to run the fake server. <code>ok</code>/<code>fail</code>: twelve call sites. <code>guard</code>: eight call sites. <code>positional</code>: four call sites. <code>withClient</code>: the restart logic in T8 must live in one place. <code>flatten</code>, <code>locToPath</code>, <code>hoverText</code>, <code>asArray</code>: each normalises an LSP union type that the server may return either way; removing them moves the same branches into the handlers. Nothing else was introduced.</li>
+</ul>
+
+    </main>
+  </div>
+</body>
+</html>
