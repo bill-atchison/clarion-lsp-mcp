@@ -151,3 +151,33 @@ describe("diagnostics and project files", () => {
     rmSync(redirDir, { recursive: true, force: true });
   });
 });
+
+describe("crash recovery", () => {
+  it("restarts the server after a crash and retries once, surfacing stderr on a second failure", async () => {
+    h = await connect();
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const pid1 = (await h.call("lsp_debug_status")).data.pid;
+    process.kill(pid1);                                     // simulate a crash
+    await new Promise(r => setTimeout(r, 300));
+    expect((await h.call("lsp_debug_status")).data.running).toBe(false);
+    const r = await h.call("lsp_hover", { file_path: file, line: 0, character: 0 });
+    expect(r.isError).toBe(false);
+    expect(r.data).toEqual({ contents: "hover 0:0" });
+    const pid2 = (await h.call("lsp_debug_status")).data.pid;
+    expect(pid2).not.toBe(pid1);
+    expect((await h.call("get_solution_info")).data.ready).toBe(true);
+  });
+
+  it("gives up after the retry and includes stderr", async () => {
+    h = await connect({ FAKE_CRASH_ON_HOVER: "1" });
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const r = await h.call("lsp_hover", { file_path: file, line: 0, character: 0 });
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toMatch(/after restart/);
+    expect(Array.isArray(r.data.stderrTail)).toBe(true);
+  });
+});

@@ -38,8 +38,11 @@ export function createSession(overrides: Partial<SessionOptions> = {}): Session 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 export const ok = (data: unknown): ToolResult =>
   ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }] });
-export const fail = (message: string): ToolResult =>
-  ({ content: [{ type: "text", text: JSON.stringify({ error: message }) }], isError: true });
+export const fail = (message: string): ToolResult => {
+  const [error, tail] = message.split("\nstderrTail:\n");
+  const body = tail === undefined ? { error } : { error, stderrTail: tail.split("\n") };
+  return { content: [{ type: "text", text: JSON.stringify(body) }], isError: true };
+};
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function startClient(s: Session): Promise<void> {
@@ -67,7 +70,19 @@ async function openSolution(s: Session, args: { solution_path?: string; configur
 
 export async function withClient<T>(s: Session, fn: (c: LspClient) => Promise<T>): Promise<T> {
   if (!s.solution || !s.params || !s.client) throw new Error("No solution open. Call open_solution first.");
-  return fn(s.client);
+  if (!s.client.running) await startClient(s);
+  try {
+    return await fn(s.client);
+  } catch (e) {
+    if (s.client.running) throw e;                 // a real answer from a live server
+    await startClient(s);                          // full handshake + updatePaths
+    try {
+      return await fn(s.client);
+    } catch (e2) {
+      const tail = s.client.stderrTail.join("\n");
+      throw new Error(`Language server failed again after restart: ${msg(e2)}\nstderrTail:\n${tail}`);
+    }
+  }
 }
 
 function checkFile(file_path: string): string {
