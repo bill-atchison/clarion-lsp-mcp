@@ -77,3 +77,54 @@ export function findClarionRoot(opts: FindRootOptions = {}): ClarionRoot {
   }
   return describe(found[0].root, found[0].version);
 }
+
+export function findSolution(explicit: string | undefined, cwd: string): string {
+  if (explicit) {
+    const p = path.resolve(explicit);
+    if (!p.toLowerCase().endsWith(".sln")) throw new Error(`solution_path must be a .sln file: ${p}`);
+    if (!existsSync(p)) throw new Error(`Solution not found: ${p}`);
+    return p;
+  }
+  const found = readdirSync(cwd)
+    .filter(f => f.toLowerCase().endsWith(".sln"))
+    .map(f => path.join(cwd, f));
+  if (found.length === 1) return found[0];
+  if (found.length === 0) throw new Error(`No .sln file in ${cwd}. Pass solution_path.`);
+  throw new Error(`Several .sln files in ${cwd}: ${found.join(", ")}. Pass solution_path.`);
+}
+
+export interface UpdatePathsParams {
+  solutionFilePath: string;
+  redirectionFile: string;
+  redirectionPaths: string[];
+  libsrcPaths: string[];
+  projectPaths: string[];          // [0] MUST be the solution directory
+  macros: Record<string, string>;
+  configuration: string;
+  clarionVersion: string;
+  defaultLookupExtensions: string[];
+}
+
+function firstRed(dir: string): string | undefined {
+  if (!existsSync(dir)) return undefined;
+  const f = readdirSync(dir).find(n => n.toLowerCase().endsWith(".red"));
+  return f ? path.join(dir, f) : undefined;
+}
+
+export function buildPaths(clarion: ClarionRoot, solutionFile: string,
+                           configuration = "Debug"): UpdatePathsParams {
+  const solutionDir = path.dirname(solutionFile);
+  const bin = path.join(clarion.root, "bin");
+  const redirectionFile = firstRed(solutionDir) ?? firstRed(bin) ?? "";
+  return {
+    solutionFilePath: solutionFile,
+    redirectionFile,
+    redirectionPaths: [bin],
+    libsrcPaths: [path.join(clarion.root, "libsrc", "win"), path.join(clarion.root, "libsrc")],
+    projectPaths: [solutionDir],
+    macros: { ClarionRoot: clarion.root, bin, redname: path.basename(redirectionFile) },
+    configuration,
+    clarionVersion: clarion.version,
+    defaultLookupExtensions: [".clw", ".inc", ".equ", ".eq", ".int"],
+  };
+}
