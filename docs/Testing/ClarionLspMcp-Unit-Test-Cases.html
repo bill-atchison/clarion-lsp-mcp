@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<!--
+  TEST-EXECUTION INSTRUMENT TEMPLATE (self-contained, offline, no network).
+  Proven engine extracted from a real suite. To adapt it you edit ONLY the marked
+  CUSTOMIZE blocks: SUITE_ID / SUITE_TITLE / SECTIONS / CASES / HEADER_FIELDS +
+  matching freshState.header keys / SIGN_ROLES + matching freshState.signoff keys /
+  renderPreamble text / the <title>, <h1>, <p class="sub">. Everything else is the
+  generic engine — leave it alone. Keep the file fully inline (no <link>/CDN/fonts).
+-->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarion LSP MCP — Live Run Test Cases</title>
+<style>
+  :root{
+    --paper:#f4efe1; --ink:#221f18; --maroon:#8a2b27; --meta-bg:#e9e1cd;
+    --label:#6d5f4e; --value:#2b2820; --amber:#a8762b; --rule:#d8cdb2; --soft:#efe7d3;
+    --ok:#3f6f3a; --bad:#8a2b27;   /* warnings reuse --amber */
+    --serif:Georgia,'Times New Roman',serif;
+    --mono:ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);padding:1.5rem;}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{font-family:var(--serif);font-size:2rem;margin:0 0 .3rem;}
+  .sub{font-style:italic;color:var(--label);margin:0 0 1.2rem;}
+.case{background:var(--meta-bg);border-left:5px solid var(--maroon);border-radius:10px;
+      padding:1rem 1.25rem;margin:1rem 0;}
+.case h3{margin:0 0 .3rem;font-size:1.15rem;}
+.case .pill{font-family:var(--mono);font-size:.66rem;font-weight:700;text-transform:uppercase;
+      border:1px solid currentColor;border-radius:999px;padding:.08rem .5rem;margin-left:.5rem;}
+.pill.CORE{color:var(--maroon);} .pill.HIGH{color:var(--amber);} .pill.MED{color:var(--label);}
+.chip{font-family:var(--mono);font-size:.66rem;font-weight:700;border:1px solid currentColor;
+      border-radius:999px;padding:.08rem .5rem;margin-left:.5rem;color:var(--label);}
+.chip.PASS{color:var(--ok);} .chip.FAIL{color:var(--bad);} .chip.BLOCKED{color:var(--amber);} .chip.NA{color:var(--label);}
+.case .ro{font-size:.92rem;margin:.35rem 0;}
+.case .ro b{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;color:var(--label);}
+.steplist{list-style:none;padding-left:0;margin:.4rem 0;}
+.steplist li{margin:.2rem 0;font-size:.95rem;}
+.verdict label{margin-right:1rem;font-family:var(--mono);font-size:.85rem;}
+.case textarea{width:100%;font-family:var(--mono);font-size:.82rem;margin-top:.3rem;
+      border:1px solid var(--rule);border-radius:6px;padding:.4rem;background:#fbf7ec;}
+.flag{display:inline-block;font-family:var(--mono);font-size:.72rem;color:var(--amber);
+      border:1px solid var(--amber);border-radius:5px;padding:.05rem .4rem;margin-left:.5rem;}
+.escaped{white-space:pre-wrap;}
+.stepcount{font-family:var(--mono);font-size:.72rem;color:var(--label);margin-left:.5rem;}
+.stepcount.full{color:var(--ok);}
+.runhdr{background:var(--soft);border:1px solid var(--rule);border-radius:10px;padding:1rem;margin:1rem 0;}
+.hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.6rem;}
+.hf{display:flex;flex-direction:column;font-family:var(--mono);font-size:.72rem;color:var(--label);}
+.hf input{font-size:.9rem;padding:.3rem;border:1px solid var(--rule);border-radius:5px;background:#fbf7ec;}
+.hstatus{margin-top:.6rem;font-family:var(--mono);font-size:.8rem;}
+#saveStatus.ok{color:var(--ok);} #saveStatus.warn-text{color:var(--bad);font-weight:700;}
+.resume{color:var(--amber);margin-right:1rem;}
+.signtbl input{width:100%;font-family:var(--mono);font-size:.85rem;padding:.25rem;border:1px solid var(--rule);border-radius:5px;}
+h2.sec{font-size:1.3rem;border-bottom:2px solid var(--maroon);padding-bottom:.3rem;margin:1.5rem 0 .5rem;}
+details.pre{background:var(--soft);border:1px solid var(--rule);border-radius:10px;
+      padding:.6rem 1rem;margin:1rem 0;}
+details.pre summary{cursor:pointer;font-weight:700;}
+.notice{background:#f6e7c8;border:1px solid var(--amber);border-radius:8px;padding:.7rem 1rem;
+      margin:.8rem 0;font-family:var(--mono);font-size:.85rem;}
+.notice button{margin-left:.6rem;font-family:var(--mono);cursor:pointer;}
+.dash{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:2px solid var(--maroon);
+      padding:.6rem 0;margin-bottom:1rem;}
+#counts{font-family:var(--mono);font-size:.85rem;}
+.bar{height:8px;background:var(--rule);border-radius:4px;margin:.4rem 0;overflow:hidden;}
+#barFill{height:100%;background:var(--amber);width:0;transition:width .2s;}
+.dashctl{font-family:var(--mono);font-size:.82rem;}
+.dashctl select,.dashctl button{font-family:var(--mono);font-size:.8rem;margin-left:.4rem;
+      padding:.25rem .6rem;border:1px solid var(--maroon);border-radius:6px;background:var(--meta-bg);cursor:pointer;}
+/* BRAND-REPORT-CSS:BEGIN — refreshed from skills/dollar-tree-branding/brand-report.css */
+/* Canonical DT report stylesheet — every rule #report-scoped so it can never
+   restyle instrument house screens. Token values MUST mirror brand.css
+   (parity-guarded). Repo + payload file; refreshed into instruments via
+   marked blocks per the dollar-tree-branding skill. */
+
+#report{
+  --brand-green:#009639;
+  --brand-green-dark:#007a2f;
+  --brand-green-light:#6CC24A;
+  --brand-green-link:#12823b;
+  --brand-green-header:#00953a;
+  --brand-blue:#0033a1;
+  --brand-blue-soft:#e8eefb;
+  --brand-blue-line:#c3d2f0;
+  --brand-orange:#ED8B00;
+  --brand-red:#DA291C;
+  --brand-gray-d:#4C4C4D;
+  --brand-gray-l:#DDDDDD;
+  --brand-text:#333333;
+  --brand-bg:#faf8f2;
+  --brand-soft:#f3efe6;
+  --brand-green-soft:#e6f4ea;
+  --brand-line:#dcdedd;
+  --brand-muted:#5a6b62;
+  --brand-black:#231F20;
+  --warn-soft:#fdf0d9;
+  --warn-line:#f3d39a;
+  --danger-soft:#fbe6e4;
+  --danger-line:#f1c2bd;
+}
+
+/* --- Base --- */
+#report .rpt{font-family:Futura,'Century Gothic','Calibri','Segoe UI',Arial,sans-serif;color:var(--brand-text);}
+
+/* --- Masthead --- */
+#report .rpt-hd{background:var(--brand-green);color:#fff;text-align:center;padding:22px 16px;border-bottom:4px solid var(--brand-green-light);}
+#report .rpt-wm{display:inline-block;border:2px solid rgba(255,255,255,.85);border-radius:6px;padding:6px 15px;font-weight:700;letter-spacing:.06em;font-size:16px;} /* zero-asset text-wordmark fallback — keep */
+#report .rpt-logo img{max-height:44px;width:auto;}
+#report .rpt-hd h1{font-size:24px;margin:11px 0 4px;font-weight:600;letter-spacing:0;}
+#report .rpt-sub{color:#d6efdd;font-size:13px;margin:0;}
+
+/* --- Meta table --- */
+#report .rpt-meta{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px;}
+#report .rpt-meta td{border:1px solid var(--brand-line);padding:5px 9px;}
+#report .rpt-meta td:first-child{background:var(--brand-soft);font-weight:600;width:28%;color:var(--brand-gray-d);}
+
+/* --- Verdict banner --- */
+#report .rpt-verdict{border-radius:8px;padding:11px 16px;margin:14px 0;border:1px solid;border-left-width:5px;}
+#report .rpt-verdict.pass{background:var(--brand-green-soft);border-color:var(--brand-green);}
+#report .rpt-verdict.fail{background:var(--danger-soft);border-color:var(--brand-red);}
+#report .rpt-vtitle{font-weight:700;font-size:15px;}
+#report .rpt-verdict.pass .rpt-vtitle{color:var(--brand-green-dark);}
+#report .rpt-verdict.fail .rpt-vtitle{color:#a5160b;}
+#report .rpt-verdict p{margin:.3rem 0 0;font-size:12px;}
+
+/* --- Stat tiles --- */
+#report .rpt-tiles{display:flex;gap:8px;margin:14px 0;}
+#report .rpt-tiles .tile{flex:1;text-align:center;border:1px solid var(--brand-line);border-radius:8px;padding:8px 4px;background:#f7f9f7;}
+#report .rpt-tiles .tile b{display:block;font-size:23px;line-height:1;}
+#report .rpt-tiles .tile span{font-size:9px;letter-spacing:.08em;color:var(--brand-muted);}
+#report .rpt-tiles .tile.pass b{color:var(--brand-green);}
+#report .rpt-tiles .tile.fail b{color:var(--brand-red);}
+#report .rpt-tiles .tile.blk b{color:var(--brand-orange);}
+#report .rpt-tiles .tile.na b{color:var(--brand-gray-d);}
+#report .rpt-tiles .tile.nr b{color:#8a8f8b;}
+
+/* --- Section heading --- */
+#report .rpt-h2{font-size:16px;color:var(--brand-green);border-bottom:2px solid var(--brand-green-light);padding-bottom:3px;margin:20px 0 4px;font-weight:600;}
+
+/* --- Version / note lines (release-info vocabulary) --- */
+#report .rpt-ver{font-family:Consolas,monospace;font-size:12.5px;font-weight:700;color:var(--brand-green-dark);margin:10px 0 4px;}
+#report .rpt-note{font-style:italic;color:var(--brand-gray-d);font-size:12.5px;margin:6px 0;}
+
+/* --- Prose lists inside .rpt --- */
+#report .rpt ul{margin:5px 0 8px 0;padding-left:22px;}
+#report .rpt li{margin:3px 0;font-size:12.5px;line-height:1.45;}
+#report .rpt .tk{font-weight:700;color:var(--brand-green-dark);}
+#report .rpt .sub-ul{border-left:3px solid var(--brand-green-soft);padding-left:14px;margin-left:6px;}
+#report .rpt .prose{font-size:12.5px;line-height:1.5;white-space:pre-wrap;margin:6px 0;}
+#report .rpt .empty{color:#8a8f8b;font-style:italic;font-size:12px;}
+
+/* --- Affected modules table (release-info vocabulary) --- */
+#report .rpt-aff{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px;}
+#report .rpt-aff td{border:1px solid var(--brand-line);padding:5px 9px;vertical-align:top;}
+#report .rpt-aff td:first-child{width:34%;font-weight:700;color:var(--brand-green-dark);font-family:Consolas,monospace;}
+#report .rpt-aff .m{white-space:pre-wrap;font-family:Consolas,monospace;}
+
+/* --- Results table (unit-test vocabulary; sign-off is table.rpt-sign below) --- */
+#report .rpt-tbl{width:100%;border-collapse:collapse;font-size:10.5px;}
+#report .rpt-tbl th,#report .rpt-tbl td{border:1px solid var(--brand-line);padding:3px 6px;text-align:left;vertical-align:top;}
+#report .rpt-tbl th{background:var(--brand-green-soft);color:var(--brand-green-dark);}
+
+/* --- Footer --- */
+#report .rpt-foot{font-size:9px;color:var(--brand-muted);margin-top:18px;border-top:1px solid var(--brand-line);padding-top:8px;}
+
+/* --- New vocabulary for redesigned report builders --- */
+#report .rpt-badge{display:inline-block;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;letter-spacing:.02em;}
+#report .rpt-badge.pass{background:var(--brand-green-soft);color:var(--brand-green-dark);border:1px solid #bfe0c9;}
+#report .rpt-badge.fail{background:var(--danger-soft);color:#8a1c12;border:1px solid var(--danger-line);}
+#report .rpt-badge.blk{background:var(--warn-soft);color:#7a5200;border:1px solid var(--warn-line);}
+#report .rpt-badge.na{background:var(--brand-soft);color:var(--brand-gray-d);border:1px solid var(--brand-line);}
+#report .rpt-badge.info{background:var(--brand-blue-soft);color:var(--brand-blue);border:1px solid var(--brand-blue-line);}
+#report ul.rpt-timeline{margin:10px 0;padding:0 0 0 18px;border-left:2px solid var(--brand-green-light);list-style:none;}
+#report ul.rpt-timeline li{position:relative;padding:0 0 10px 12px;font-size:12.5px;}
+#report ul.rpt-timeline li::before{content:"";position:absolute;left:-23px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--brand-green);box-shadow:0 0 0 2px var(--brand-green);border:2px solid #fff;}
+#report ul.rpt-timeline .when{font-size:10.5px;color:var(--brand-muted);text-transform:uppercase;letter-spacing:.05em;display:block;}
+#report table.rpt-sign{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px;}
+#report table.rpt-sign td{border:1px solid var(--brand-line);padding:8px 9px;}
+#report table.rpt-sign td:first-child{background:var(--brand-soft);font-weight:600;width:32%;color:var(--brand-gray-d);}
+
+/* --- Print --- */
+@media print{
+  #report .rpt-hd,#report .rpt-h2,#report .rpt-tbl th,#report table.rpt-sign td:first-child,#report .rpt-meta td:first-child,#report .rpt-tiles .tile,#report .rpt-verdict,#report .rpt-badge{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #report .rpt-tbl tr,#report .rpt-sign tr{page-break-inside:avoid;}
+  #report .rpt ul,#report .rpt li{page-break-inside:avoid;}
+}
+/* BRAND-REPORT-CSS:END */
+#report{display:none;}
+@media print{
+  body{padding:0;background:#fff;}
+  #loadNotice,#preamble,#runHeader,#dashboard,#cases,#signoff{display:none !important;}
+  #report{display:block !important;}
+  .rpt-hd,.rpt-h2,.rpt-tbl th,.rpt-sign th,.rpt-meta td:first-child,.rpt-tiles .tile,.rpt-verdict{
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .rpt-tbl tr,.rpt-sign tr{page-break-inside:avoid;}
+}
+</style></head><body><div class="wrap">
+  <!-- >>> CUSTOMIZE: title + one-line subtitle <<< -->
+  <h1>Clarion LSP MCP — Live Run in Claude Code</h1>
+  <p class="sub">Manual test protocol with the Clarion IDE closed &middot; tick steps, record verdicts, print a PDF report.</p>
+  <div id="loadNotice"></div>
+  <div id="preamble"></div>
+  <div id="runHeader"></div>
+  <div id="dashboard"></div>
+  <div id="cases"></div>
+  <div id="report"></div>
+  <div id="signoff"></div>
+</div>
+<script>
+"use strict";
+
+/* ============================ CUSTOMIZE START ============================ */
+var SCHEMA_VERSION = "v1";          // bump ONLY on a breaking change to the CASES shape
+var SUITE_ID = "clarion-lsp-mcp";   // stable lowercase slug — keys localStorage
+var STORAGE_KEY = "uts:" + SUITE_ID + ":" + SCHEMA_VERSION;
+var SUITE_TITLE = "Clarion LSP MCP — Live Run in Claude Code";   // heading on the printed report
+
+// Sections drive the filter dropdown. One key per logical group of cases.
+var SECTIONS = [
+  {key:"setup", label:"Install and register"},
+  {key:"open",  label:"Opening a solution"},
+  {key:"nav",   label:"Code navigation"},
+  {key:"diag",  label:"Diagnostics and edits"},
+  {key:"fail",  label:"Failure handling and recovery"},
+  {key:"skill", label:"Plugin skill compatibility"}
+];
+
+// One object per test case. RULE: one source-numbered action = one steps[] entry = one checkbox.
+// priority is "CORE" | "HIGH" | "MED". section must match a SECTIONS key.
+var CASES = [
+  { id:"TC-01", section:"setup", priority:"CORE",
+    title:"Confirm the workstation prerequisites",
+    pre:"A Windows PC with Clarion 12 (or 11.1) installed and the Clarion Assistant IDE addin present. Node.js installed. A real Clarion solution folder to test with (record its .sln path in the run header).",
+    steps:[
+      "Close the Clarion IDE. Open Task Manager, Details tab, and confirm there is no Clarion.exe process running.",
+      "Open a command prompt and run: node --version",
+      "In File Explorer, browse to C:\\Clarion12\\accessory\\addins\\ClarionAssistant\\lsp-server (substitute your Clarion folder) and confirm node.exe exists there and the file out\\server\\src\\server.js exists beneath it.",
+      "In the command prompt run: claude --version"
+    ],
+    expected:"No Clarion.exe process. node --version prints v20 or higher. The lsp-server folder contains node.exe and out\\server\\src\\server.js. claude --version prints a version. If node is missing or older than v20, record BLOCKED and install the current Node LTS before continuing." },
+
+  { id:"TC-02", section:"setup", priority:"CORE",
+    title:"Register the server with Claude Code",
+    pre:"TC-01 passed. Decide whether you are testing the published npm package or a local build; record which in the run header Build field.",
+    steps:[
+      "For the local build, run: claude mcp add clarion-lsp -- node C:\\Projects\\GitHub\\clarion-lsp-mcp\\dist\\index.js   (adjust the path). For the npm package, run instead: claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp",
+      "Run: claude mcp list",
+      "Run: claude mcp get clarion-lsp"
+    ],
+    expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows the command you registered with scope local or user and no error. If the list shows clarion-lsp as failed or disconnected, record FAIL and paste the output into Notes." },
+
+  { id:"TC-03", section:"setup", priority:"CORE",
+    title:"Tools are visible inside a Claude Code session",
+    pre:"TC-02 passed.",
+    steps:[
+      "In the command prompt, change directory to the folder that contains the test solution's .sln file.",
+      "Run: claude   (start an interactive session).",
+      "Type: /mcp   and open the clarion-lsp entry."
+    ],
+    expected:"The clarion-lsp server shows as connected and lists twelve tools: open_solution, lsp_start, get_solution_info, lsp_debug_status, lsp_definition, lsp_references, lsp_hover, lsp_document_symbols, lsp_find_symbol, lsp_rename, lsp_diagnostics, get_project_source_files. If the server shows as failed, record FAIL and copy the error text shown into Notes." },
+
+  { id:"TC-04", section:"open", priority:"CORE",
+    title:"Open the solution and reach ready",
+    pre:"TC-03 passed. You are in the Claude Code session started inside the solution folder. Clarion IDE is closed.",
+    steps:[
+      "Type: Open the Clarion solution in this folder using the open_solution tool and show me the raw result.",
+      "When Claude Code asks permission to run the tool, allow it.",
+      "Read the tool result Claude shows. Note the value of ready, clarionRoot, clarionVersion, and redirectionFile."
+    ],
+    expected:"The result shows ready: true, solution equal to your .sln path, clarionRoot equal to your Clarion install folder, a clarionVersion such as 12.0.0.14000, and a redirectionFile path ending in .red. There is no stderrTail field. If ready is false, wait one minute and rerun TC-05 before recording; a large solution may still be indexing. If the result is an error mentioning CLARION_ROOT or the Clarion Assistant addin, record FAIL and paste the message into Notes." },
+
+  { id:"TC-05", section:"open", priority:"CORE",
+    title:"Status tools report a live server",
+    pre:"TC-04 completed.",
+    steps:[
+      "Type: Call get_solution_info and show me the raw result.",
+      "Type: Call lsp_debug_status and show me the raw result.",
+      "Write down the pid value from lsp_debug_status; TC-17 compares against it."
+    ],
+    expected:"get_solution_info shows the same solution path and ready value as TC-04. lsp_debug_status shows running: true, a numeric pid, and notifications greater than 0. If running is false, record FAIL and paste stderrTail into Notes." },
+
+  { id:"TC-06", section:"open", priority:"CORE",
+    title:"Project source files are listed with absolute paths",
+    pre:"TC-04 completed. Know the name of at least one .clw file in the solution.",
+    steps:[
+      "Type: Call get_project_source_files and show me the raw result.",
+      "Count the projects returned and compare with the projects in the .sln (open the .sln in Notepad; each Project(...) line with a .cwproj is one project).",
+      "Search the result for the .clw file name you know."
+    ],
+    expected:"One entry per .cwproj project, each with a files list of absolute paths ending in .clw or .inc, and an unresolved list. The known .clw appears with its full path. unresolved is normally empty; if it is not, check whether each named file exists anywhere under the solution folder. A name that exists on disk but is listed as unresolved is a FAIL; a name that does not exist (for example source not yet generated) is a PASS with the names pasted into Notes." },
+
+  { id:"TC-07", section:"nav", priority:"CORE",
+    title:"Document symbols for a source file",
+    pre:"TC-06 completed. Pick one .clw from the list that contains at least one PROCEDURE; open it in Notepad and note two procedure names.",
+    steps:[
+      "Type: Call lsp_document_symbols on <full path of the .clw> and show me the raw result.",
+      "Search the result for the two procedure names you noted."
+    ],
+    expected:"Both procedure names appear with a kind number and a zero-based line. The line for each, plus one, matches the line number shown in Notepad's status bar for that procedure. If the list is empty, record FAIL." },
+
+  { id:"TC-08", section:"nav", priority:"CORE",
+    title:"Go to definition across files",
+    pre:"TC-07 completed. In the same .clw, find a line that CALLS a procedure defined elsewhere in the solution (or in the same file). Note the file, the line number from Notepad, and the column of the procedure name.",
+    steps:[
+      "Type: Call lsp_definition on <full path>, line <Notepad line minus 1>, character <column minus 1> and show me the raw result.",
+      "Write down the file, line and character you used; TC-09, TC-10, TC-14 and TC-17 reuse them.",
+      "Open the file_path the result names in Notepad and go to the result line plus one."
+    ],
+    expected:"The result is a list with at least one entry, and the file and line it names is where the procedure is declared or implemented. If the list is empty, record FAIL and note the exact line and character you used." },
+
+  { id:"TC-09", section:"nav", priority:"HIGH",
+    title:"Find references matches a manual search",
+    pre:"TC-08 completed. Use the same procedure name.",
+    steps:[
+      "Open a second command prompt in the solution folder (leave Claude Code running in the first) and run: findstr /s /i /n /c:\"<ProcedureName>\" *.clw *.inc   Keep this window open; it lists file:line for every occurrence.",
+      "Type in Claude Code: Call lsp_references at the position from TC-08 and show me the raw result.",
+      "For each entry in the result, find its file and line plus one in the findstr output."
+    ],
+    expected:"The result has at least one entry, and every entry's file and line (plus one) appears in the findstr output. If the result is empty while findstr found the name in more than one place, or an entry points at a file and line findstr did not list, record FAIL and paste both outputs into Notes." },
+
+  { id:"TC-10", section:"nav", priority:"HIGH",
+    title:"Hover returns a signature",
+    pre:"TC-08 completed.",
+    steps:[
+      "Type: Call lsp_hover at the position from TC-08 and show me the raw result."
+    ],
+    expected:"The result has a contents string that is not empty and mentions the procedure name, and usually its prototype. If contents is an empty string, record FAIL." },
+
+  { id:"TC-11", section:"nav", priority:"HIGH",
+    title:"Workspace symbol search by name",
+    pre:"TC-07 completed.",
+    steps:[
+      "Type: Call lsp_find_symbol with query <first four letters of the procedure name> and show me the raw result."
+    ],
+    expected:"The result lists at least one symbol whose name contains the query, each with file_path and line. The procedure from TC-07 is among them. If the list is empty, record FAIL." },
+
+  { id:"TC-12", section:"diag", priority:"CORE",
+    title:"Diagnostics on an unchanged file",
+    pre:"TC-07 completed. Use the same .clw.",
+    steps:[
+      "Type: Call lsp_diagnostics on <full path of the .clw> and show me the raw result.",
+      "Type the same request a second time."
+    ],
+    expected:"Both results show pending: false. The count is the same both times, and diagnostics is a list of that length. If the first result shows pending: true, ask once more; if it is still pending, record FAIL and run lsp_debug_status, pasting stderrTail into Notes." },
+
+  { id:"TC-13", section:"diag", priority:"CORE",
+    title:"An edit made outside the server is seen and reported",
+    pre:"TC-12 completed and its count recorded. The .clw is not open in any editor that will rewrite it.",
+    steps:[
+      "Open the .clw in Notepad. Inside the CODE section of the first procedure, add a new line containing exactly:   CASE 1   (three leading spaces) with no matching END, then save.",
+      "Type in Claude Code: Call lsp_diagnostics on the same file and show me the raw result.",
+      "Search the result for the message text: CASE statement is not terminated",
+      "In Notepad, delete the line you added and save.",
+      "Type in Claude Code: Call lsp_diagnostics on the same file again and show me the raw result."
+    ],
+    expected:"After the edit, count is at least one greater than in TC-12, and one diagnostic has the message CASE statement is not terminated with END or . and a line equal to your inserted line number minus one. After reverting, count returns to the TC-12 value. If the edited count does not rise, record FAIL." },
+
+  { id:"TC-14", section:"diag", priority:"CORE",
+    title:"Rename proposes edits and writes nothing",
+    pre:"TC-08 completed. In the second command prompt from TC-09 run: git status --short   (if the solution is in git) or note the Date modified of the .clw in File Explorer.",
+    steps:[
+      "Type: Call lsp_rename at the position from TC-08 with new_name <ProcedureName>Renamed and show me the raw result. Do not apply anything.",
+      "Count the entries in edits.",
+      "In the second command prompt run git status --short again, or re-check Date modified in File Explorer."
+    ],
+    expected:"The result has an edits list with at least one entry, each with file_path, line, character, endLine, endCharacter, and newText equal to the new name. No file changed: git status is unchanged, or the Date modified is unchanged. If any file changed, record FAIL and restore it from source control." },
+
+  { id:"TC-15", section:"fail", priority:"HIGH",
+    title:"Tools refuse before a solution is open",
+    pre:"TC-02 passed. Start a fresh session so nothing is open.",
+    steps:[
+      "Type: /exit   to leave the current Claude Code session, then run: claude   again in the same folder.",
+      "Type: Call lsp_hover on C:\\x.clw line 0 character 0 and show me the raw result."
+    ],
+    expected:"The tool returns an error result whose text is: No solution open. Call open_solution first. Claude reports it as an error, not a crash. If any other message appears, record FAIL and paste it." },
+
+  { id:"TC-16", section:"fail", priority:"MED",
+    title:"A missing file is refused without touching the server",
+    pre:"In the fresh session from TC-15, open the solution again (repeat TC-04 step 1).",
+    steps:[
+      "Type: Call lsp_debug_status and note openDocuments.",
+      "Type: Call lsp_diagnostics on <solution folder>\\DoesNotExist.clw and show me the raw result.",
+      "Type: Call lsp_debug_status again and compare openDocuments."
+    ],
+    expected:"The diagnostics call returns an error result containing File not found. openDocuments is the same before and after. If openDocuments increased, record FAIL." },
+
+  { id:"TC-17", section:"fail", priority:"HIGH",
+    title:"The server recovers from a crash",
+    pre:"Solution open (TC-16). Have the pid from TC-05 or a fresh lsp_debug_status.",
+    steps:[
+      "Type: Call lsp_debug_status and write down pid.",
+      "Open Task Manager, Details tab, sort by PID, select the node.exe with that PID, and click End task.",
+      "Type in Claude Code: Call lsp_debug_status and show me the raw result.",
+      "Type: Call lsp_hover at the position from TC-08 and show me the raw result.",
+      "Type: Call lsp_debug_status once more and compare pid."
+    ],
+    expected:"After End task, lsp_debug_status shows running: false. The hover call still returns a non-empty contents string, not an error. The final lsp_debug_status shows running: true with a different pid. If the hover call returns an error containing failed again after restart, record FAIL and paste stderrTail into Notes." },
+
+  { id:"TC-18", section:"fail", priority:"MED",
+    title:"A wrong CLARION_ROOT produces a clear error",
+    pre:"Not inside a Claude Code session (type /exit first).",
+    steps:[
+      "In the command prompt run: set CLARION_ROOT=C:\\NotClarion",
+      "Run: claude   in the solution folder.",
+      "Type: Open the Clarion solution in this folder using open_solution and show me the raw result.",
+      "Open Task Manager, Details tab, and confirm no node.exe with a PID you have not seen before has appeared.",
+      "Type: /exit   then in the command prompt run: set CLARION_ROOT=   (clears it for this window)."
+    ],
+    expected:"open_solution returns an error result whose text says C:\\NotClarion is not a Clarion install with the Clarion Assistant addin (expected bin\\Clarion.exe and accessory\\addins\\ClarionAssistant\\lsp-server\\node.exe). No new node.exe appears in Task Manager. If the solution opens successfully instead, record FAIL: the override was ignored." },
+
+  { id:"TC-19", section:"skill", priority:"CORE",
+    title:"The clarion-assistant /lsp-diagnostics skill runs end to end with the IDE closed",
+    pre:"The clarion-assistant Claude Code plugin is installed (its skills appear when you type /). CLARION_ROOT is unset or correct. Clarion IDE is closed.",
+    steps:[
+      "Run: claude   in the solution folder.",
+      "Type: Open the Clarion solution in this folder using open_solution.   (The skill checks get_solution_info first and stops if nothing is open.)",
+      "Type: /clarion-assistant:lsp-diagnostics   (or pick lsp-diagnostics from the list that appears when you type /).",
+      "Allow each tool call the skill requests.",
+      "Read the final summary line."
+    ],
+    expected:"The skill completes and prints a summary in the form Solution diagnostics: X errors, Y warnings, Z info across N files (P files clean), or Solution is clean. The transcript shows calls to get_solution_info, lsp_debug_status, get_project_source_files, and lsp_diagnostics, and none of them is reported as an unknown tool. If the skill stops saying no solution is open or a tool was not found, record FAIL and paste the message." },
+
+  { id:"TC-20", section:"setup", priority:"MED",
+    title:"Unregister cleanly",
+    pre:"All other cases recorded.",
+    steps:[
+      "Type: /exit   to leave Claude Code.",
+      "Run: claude mcp remove clarion-lsp",
+      "Run: claude mcp list",
+      "Open Task Manager, Details tab, right-click a column header, choose Select columns, tick Command line, and confirm no node.exe whose command line contains lsp-server remains."
+    ],
+    expected:"claude mcp list no longer shows clarion-lsp, and no leftover language server process is running. The Clarion install folder is unchanged. If a node.exe from lsp-server is still running, record FAIL and end it manually." }
+];
+
+// Run-header fields (key, label). KEEP keys in sync with freshState().header below.
+var HEADER_FIELDS = [
+  ["tester","Tester"],["date","Date"],
+  ["build","Build under test (npm version or commit)"],
+  ["claude","Claude Code version"],
+  ["clarion","Clarion root and version"],
+  ["solution","Test solution (.sln path)"],
+  ["ref","Branch / ticket"]
+];
+
+// Sign-off roles (key, label). KEEP keys in sync with freshState().signoff below.
+var SIGN_ROLES = [["tester","Tester"],["owner","Owner"]];
+
+function freshState(){
+  var cases = {};
+  CASES.forEach(function(c){
+    cases[c.id] = { steps: c.steps.map(function(){ return false; }),
+                    verdict: "", notes: "", evidence: "" };
+  });
+  return {
+    // >>> keys here MUST match HEADER_FIELDS keys <<<
+    header:  { tester:"", date:"", build:"", claude:"", clarion:"", solution:"", ref:"" },
+    // >>> keys here MUST match SIGN_ROLES keys <<<
+    signoff: { tester:{name:"",date:"",result:""}, owner:{name:"",date:"",result:""} },
+    cases:   cases,
+    resumed: false
+  };
+}
+
+function renderPreamble(){
+  document.getElementById("preamble").innerHTML =
+    '<details class="pre" open><summary>Scope, prerequisites &amp; environment (read first)</summary>'+
+    '<p><b>Scope.</b> A live, manual run of clarion-lsp-mcp version 0.1.0 driven from Claude Code with the Clarion IDE closed. '+
+    'It proves the server can be registered, opens a real solution, answers navigation and diagnostics questions, sees edits made outside it, '+
+    'never writes to disk, fails clearly, recovers from a crash, and still works with the clarion-assistant plugin\'s /lsp-diagnostics skill.</p>'+
+    '<p><b>Prerequisites.</b> Windows PC with Clarion 12 or 11.1 and the Clarion Assistant addin installed, Node.js 20 or newer, Claude Code installed and signed in, '+
+    'and a real Clarion solution folder you may edit (use a copy or a git checkout so TC-13 and TC-14 are safe to revert). Notepad, File Explorer, Task Manager and a command prompt are the only other tools. '+
+    'Record the solution path and the build under test in the run header before starting. TC-19 also needs the clarion-assistant Claude Code plugin.</p>'+
+    '<p><b>How to ask.</b> Every step that says "Type:" is typed into the Claude Code prompt. Asking for "the raw result" makes Claude show the tool\'s JSON so you can read field names such as ready, pending, count and pid. '+
+    'Line and character values given to tools are zero-based: subtract one from what Notepad shows.</p>'+
+    '<p><b>Known watch-point.</b> On a large solution open_solution may report ready: false after 30 seconds while the server keeps indexing in the background; wait a minute and retry the status call before recording. '+
+    'The real server only reports some kinds of problems (an unterminated CASE is reliable; a missing INCLUDE file is not), which is why TC-13 uses CASE.</p></details>';
+}
+/* ============================= CUSTOMIZE END ============================= */
+
+
+/* ===== GENERIC ENGINE BELOW — do not edit ===== */
+var loadError = false, storageOK = true, saveTimer = null;
+
+function timeNow(){
+  var d = new Date(), p = function(n){ return (n<10?"0":"")+n; };
+  return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+
+function loadState(){
+  var raw = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch(e){ storageOK = false; }
+  if(!raw) return freshState();
+  var s;
+  try { s = JSON.parse(raw); }
+  catch(e){ loadError = true; return freshState(); }   // unparseable — don't wipe; show notice
+  return hydrate(s);
+}
+
+// Merge valid values over a fresh skeleton so a drifted/partial save never throws at render.
+function hydrate(s){
+  var fresh = freshState();
+  if(!s || typeof s !== "object"){ loadError = true; return fresh; }
+  if(s.header && typeof s.header === "object"){
+    Object.keys(fresh.header).forEach(function(k){
+      if(typeof s.header[k] === "string") fresh.header[k] = s.header[k];
+    });
+  }
+  if(s.signoff && typeof s.signoff === "object"){
+    Object.keys(fresh.signoff).forEach(function(role){
+      var src = s.signoff[role]; if(!src) return;
+      ["name","date","result"].forEach(function(fld){
+        if(typeof src[fld] === "string") fresh.signoff[role][fld] = src[fld];
+      });
+    });
+  }
+  if(s.cases && typeof s.cases === "object"){
+    CASES.forEach(function(c){
+      var src = s.cases[c.id]; if(!src) return;
+      var dst = fresh.cases[c.id];
+      if(["PASS","FAIL","BLOCKED","NA",""].indexOf(src.verdict) !== -1) dst.verdict = src.verdict;
+      if(typeof src.notes === "string") dst.notes = src.notes;
+      if(typeof src.evidence === "string") dst.evidence = src.evidence;
+      if(Array.isArray(src.steps) && src.steps.length === dst.steps.length){
+        dst.steps = src.steps.map(function(b){ return !!b; });
+      }
+    });
+  }
+  fresh.resumed = true;
+  return fresh;
+}
+
+function flushState(){
+  if(loadError) return;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); storageOK = true; setSaveStatus("Saved " + timeNow()); }
+  catch(e){ storageOK = false; setSaveStatus("Not saving — print before you close"); }
+}
+function saveState(){ clearTimeout(saveTimer); saveTimer = setTimeout(flushState, 400); }
+
+var state = loadState();
+window.addEventListener("pagehide", flushState);
+document.addEventListener("visibilitychange", function(){ if(document.visibilityState === "hidden") flushState(); });
+window.addEventListener("beforeprint", flushState);
+
+function setSaveStatus(msg){
+  var el = document.getElementById("saveStatus");
+  if(el){ el.textContent = msg; el.className = storageOK ? "ok" : "warn-text"; }
+}
+function bindHeaderInput(key){ return function(e){ state.header[key] = e.target.value; saveState(); }; }
+function renderHeader(){
+  var rows = HEADER_FIELDS.map(function(f){
+    return '<label class="hf">'+f[1]+'<input id="h_'+f[0]+'" value="'+esc(state.header[f[0]])+'"></label>';
+  }).join("");
+  var resume = state.resumed ? '<span class="resume">Resumed run — last-saved data restored</span>' : '';
+  document.getElementById("runHeader").innerHTML =
+    '<div class="runhdr"><div class="hgrid">'+rows+'</div>'+
+    '<div class="hstatus">'+resume+'<span id="saveStatus"></span></div></div>';
+  HEADER_FIELDS.forEach(function(f){
+    document.getElementById("h_"+f[0]).addEventListener("input", bindHeaderInput(f[0]));
+  });
+}
+
+function renderSignoff(){
+  var rows = SIGN_ROLES.map(function(r){
+    var s = state.signoff[r[0]];
+    return '<tr><td>'+r[1]+'</td>'+
+      '<td><input class="sign" data-role="'+r[0]+'" data-field="name" value="'+esc(s.name)+'"></td>'+
+      '<td><input class="sign" data-role="'+r[0]+'" data-field="date" value="'+esc(s.date)+'"></td>'+
+      '<td><input class="sign" data-role="'+r[0]+'" data-field="result" value="'+esc(s.result)+'"></td></tr>';
+  }).join("");
+  document.getElementById("signoff").innerHTML =
+    '<h2 class="sec">Sign-off</h2><table class="signtbl"><tr><th>Role</th><th>Name</th>'+
+    '<th>Date</th><th>Result</th></tr>'+rows+'</table>';
+}
+var signBound = false;
+function bindSignDelegation(){
+  if(signBound) return; signBound = true;
+  document.getElementById("signoff").addEventListener("input", function(e){
+    var el = e.target; if(!el.classList.contains("sign")) return;
+    state.signoff[el.getAttribute("data-role")][el.getAttribute("data-field")] = el.value;
+    saveState();
+  });
+}
+
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+var VERDICTS = ["PASS","FAIL","BLOCKED","NA"];
+
+function toggleStep(id, i, checked){ state.cases[id].steps[i] = checked; saveState(); afterChange(id); }
+function setVerdict(id, v){ state.cases[id].verdict = v; saveState(); afterChange(id); }
+function setField(id, field, val){ state.cases[id][field] = val; saveState(); afterChange(id); }
+
+function renderCase(c){
+  var st = state.cases[c.id];
+  var stepsHtml = c.steps.map(function(s, i){
+    var ck = st.steps[i] ? " checked" : "";
+    return '<li><label><input type="checkbox" class="step-cb" data-id="'+c.id+'" data-i="'+i+'"'+ck+'> '+esc(s)+'</label></li>';
+  }).join("");
+  var verdictHtml = VERDICTS.map(function(v){
+    var ck = (st.verdict===v) ? " checked" : "";
+    return '<label><input type="radio" class="verdict-radio" name="v_'+c.id+'" value="'+v+'" data-id="'+c.id+'"'+ck+'> '+v+'</label>';
+  }).join("");
+  return '<div class="case" id="case_'+c.id+'" data-section="'+c.section+'">'+
+     '<h3>'+c.id+' — '+esc(c.title)+'<span class="pill '+c.priority+'">'+c.priority+'</span>'+
+        '<span class="chip" id="chip_'+c.id+'"></span>'+
+        '<span class="stepcount" id="sc_'+c.id+'"></span><span id="fl_'+c.id+'"></span></h3>'+
+     '<div class="body-collapsible">'+
+       '<div class="ro"><b>Pre</b> <span class="escaped">'+esc(c.pre)+'</span></div>'+
+       '<div class="ro"><b>Steps</b><ul class="steplist">'+stepsHtml+'</ul></div>'+
+       '<div class="ro"><b>Expected</b> <span class="escaped">'+esc(c.expected)+'</span></div>'+
+       '<div class="verdict">'+verdictHtml+'</div>'+
+       '<textarea rows="2" class="notes-ta" data-id="'+c.id+'" placeholder="Notes">'+esc(st.notes)+'</textarea>'+
+       '<textarea rows="2" class="evid-ta" data-id="'+c.id+'" placeholder="Evidence (log line / count / screenshot file)">'+esc(st.evidence)+'</textarea>'+
+     '</div></div>';
+}
+
+function renderCases(){
+  var mount = document.getElementById("cases");
+  mount.innerHTML = CASES.map(renderCase).join("");
+  CASES.forEach(function(c){ updateCard(c.id); });
+  applyFilter(activeFilter);
+}
+
+var casesBound = false;
+function bindCaseDelegation(){
+  if(casesBound) return; casesBound = true;
+  var mount = document.getElementById("cases");
+  mount.addEventListener("change", function(e){
+    var el = e.target, id = el.getAttribute("data-id"); if(!id) return;
+    if(el.classList.contains("step-cb")) toggleStep(id, +el.getAttribute("data-i"), el.checked);
+    else if(el.classList.contains("verdict-radio")) setVerdict(id, el.value);
+  });
+  mount.addEventListener("input", function(e){
+    var el = e.target, id = el.getAttribute("data-id"); if(!id) return;
+    if(el.classList.contains("notes-ta")) setField(id, "notes", el.value);
+    else if(el.classList.contains("evid-ta")) setField(id, "evidence", el.value);
+  });
+}
+function updateChip(id){
+  var el = document.getElementById("chip_"+id); if(!el) return;
+  var v = state.cases[id].verdict;
+  el.textContent = verdictLabel(v);
+  el.className = "chip " + (v || "NOTRUN");
+}
+function afterChange(id){ updateCard(id); recompute(); }
+function updateCard(id){ updateChip(id); updateStepCount(id); updateFlags(id); }
+
+function stepStats(id){
+  var arr = state.cases[id].steps, done = 0;
+  arr.forEach(function(b){ if(b) done++; });
+  return { done: done, total: arr.length };
+}
+function updateStepCount(id){
+  var el = document.getElementById("sc_"+id); if(!el) return;
+  var s = stepStats(id);
+  el.textContent = " " + s.done + "/" + s.total + " steps" + (s.done===s.total ? " ✓" : "");
+  el.className = "stepcount" + (s.done===s.total ? " full" : "");
+}
+function caseFlags(id){
+  var c = state.cases[id], s = stepStats(id), flags = [];
+  if(c.verdict==="PASS" && s.done < s.total) flags.push("PASS with " + (s.total-s.done) + " step(s) un-ticked");
+  if((c.verdict==="FAIL" || c.verdict==="BLOCKED" || c.verdict==="NA") && !c.notes.trim())
+    flags.push("Note required for " + c.verdict);
+  return flags;
+}
+function updateFlags(id){
+  var el = document.getElementById("fl_"+id); if(!el) return;
+  el.innerHTML = caseFlags(id).map(function(f){ return '<span class="flag">'+esc(f)+'</span>'; }).join("");
+}
+
+var activeFilter = "all";
+function tally(){
+  var t = {PASS:0,FAIL:0,BLOCKED:0,NA:0,NOTRUN:0};
+  CASES.forEach(function(c){ var v = state.cases[c.id].verdict || "NOTRUN"; t[v] = (t[v]||0) + 1; });
+  return t;
+}
+function passRate(t){ var d = t.PASS + t.FAIL + t.BLOCKED; return d ? Math.round((t.PASS/d)*100) : 0; }
+function completion(t){ return Math.round(((t.PASS+t.FAIL+t.BLOCKED+t.NA)/CASES.length)*100); }
+
+function renderDashboard(){
+  var secOpts = '<option value="all">All sections</option>'+
+    '<option value="notrun">Not-run only</option><option value="failed">Failed only</option>'+
+    SECTIONS.map(function(s){ return '<option value="sec:'+s.key+'">'+s.label+'</option>'; }).join("");
+  document.getElementById("dashboard").innerHTML =
+    '<div class="dash"><div id="counts"></div>'+
+    '<div class="bar"><div id="barFill"></div></div>'+
+    '<div class="dashctl">Filter: <select id="filter" onchange="applyFilter(this.value)">'+secOpts+'</select>'+
+    '<button onclick="printReport()">Generate PDF Report</button>'+
+    '<button onclick="newRun()">New Run / Clear All</button>'+
+    '<button onclick="toggleAll()">Collapse / Expand</button></div></div>';
+  recompute();
+}
+function recompute(){
+  var t = tally(), el = document.getElementById("counts");
+  if(el){
+    el.innerHTML = '<b>Pass '+t.PASS+'</b> · Fail '+t.FAIL+' · Blocked '+t.BLOCKED+' · N/A '+t.NA+
+      ' · Not-run '+t.NOTRUN+'  —  Pass-rate '+passRate(t)+'% (of Pass+Fail+Blocked) · Completion '+completion(t)+'%';
+  }
+  var bar = document.getElementById("barFill");
+  if(bar) bar.style.width = completion(t) + "%";
+}
+function applyFilter(f){
+  activeFilter = f;
+  CASES.forEach(function(c){
+    var card = document.getElementById("case_"+c.id); if(!card) return;
+    var v = state.cases[c.id].verdict;
+    var show = (f==="all") || (f==="notrun" && !v) || (f==="failed" && v==="FAIL") ||
+      (f.indexOf("sec:")===0 && c.section===f.slice(4));
+    card.style.display = show ? "" : "none";
+  });
+}
+
+function renderLoadNotice(){
+  var el = document.getElementById("loadNotice");
+  if(loadError){
+    el.innerHTML = '<div class="notice">Saved data for this run could not be read. Auto-save is paused to avoid destroying it. '+
+      '<button onclick="startFreshAfterError()">Start a fresh run (clears it)</button></div>';
+  } else { el.innerHTML = ""; }
+}
+function startFreshAfterError(){
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  loadError = false; state = freshState(); renderAll();
+}
+
+var allCollapsed = false;
+function toggleAll(){
+  allCollapsed = !allCollapsed;
+  document.querySelectorAll(".case .body-collapsible").forEach(function(b){ b.style.display = allCollapsed ? "none" : ""; });
+}
+
+function printReport(){ flushState(); buildReport(); window.print(); }
+
+function newRun(){
+  if(!window.confirm("Start a NEW run? This clears the current run's verdicts, notes, and header. Print the PDF first if you need the current results.")) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  loadError = false; state = freshState(); state.resumed = false; renderAll();
+}
+
+function verdictLabel(v){ return v || "Not run"; }
+
+// RPT-BUILDER:BEGIN
+/* ---- DT-branded completion report (printed PDF). Screen stays house; this prints. ---- */
+var RPT_LOGO = `<!-- BRAND-LOGO:BEGIN variant=combo-white — refreshed from skills/dollar-tree-branding/references/logo-snippets.md -->
+<img src="data:image/png;base64,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" alt="Dollar Tree" style="max-height:54px;width:auto;">
+<!-- BRAND-LOGO:END -->`;
+
+function badgeCell(v){
+  var map = {PASS:["pass","PASS"],FAIL:["fail","FAIL"],BLOCKED:["blk","BLOCKED"],NA:["na","N/A"]};
+  var m = map[v] || ["na","NOT RUN"];
+  return '<span class="rpt-badge '+m[0]+'">'+m[1]+'</span>';
+}
+function clearedToMerge(){   // cleared = every CORE and HIGH case is PASS
+  return CASES.every(function(c){
+    return !(c.priority==="CORE"||c.priority==="HIGH") || state.cases[c.id].verdict==="PASS";
+  });
+}
+function genStamp(){
+  var d = new Date(), p = function(n){ return (n<10?"0":"")+n; };
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+}
+
+function buildReport(){
+  var t = tally(), h = state.header;
+
+  var meta = '<tr><td>Feature</td><td>'+esc(SUITE_TITLE)+'</td></tr>';
+  meta += HEADER_FIELDS.map(function(f){ return '<tr><td>'+f[1]+'</td><td>'+esc(h[f[0]]||"—")+'</td></tr>'; }).join("");
+  meta += '<tr><td>Report generated</td><td>'+genStamp()+'</td></tr>';
+
+  var blockers = CASES.filter(function(c){
+    return (c.priority==="CORE"||c.priority==="HIGH") && state.cases[c.id].verdict!=="PASS";
+  });
+  var verdict;
+  if(clearedToMerge()){
+    verdict = '<div class="rpt-verdict pass"><div class="rpt-vtitle">PASS &mdash; cleared to merge</div>'+
+      '<p>All CORE and HIGH priority cases passed.</p></div>';
+  } else {
+    var bl = blockers.map(function(c){ return c.id+' ('+verdictLabel(state.cases[c.id].verdict)+')'; }).join(', ');
+    verdict = '<div class="rpt-verdict fail"><div class="rpt-vtitle">NOT CLEARED &mdash; '+blockers.length+' CORE/HIGH case(s) outstanding</div>'+
+      '<p>Resolve before merge: '+esc(bl)+'.</p></div>';
+  }
+
+  var tiles = '<div class="rpt-tiles">'+
+    '<div class="tile pass"><b>'+t.PASS+'</b><span>PASS</span></div>'+
+    '<div class="tile fail"><b>'+t.FAIL+'</b><span>FAIL</span></div>'+
+    '<div class="tile blk"><b>'+t.BLOCKED+'</b><span>BLOCKED</span></div>'+
+    '<div class="tile na"><b>'+t.NA+'</b><span>N/A</span></div>'+
+    '<div class="tile nr"><b>'+t.NOTRUN+'</b><span>NOT RUN</span></div></div>';
+
+  var rows = CASES.map(function(c){
+    var st = state.cases[c.id];
+    var note = esc(st.notes);
+    if(st.evidence.trim()) note += (note?' &middot; ':'')+'<i>Ev:</i> '+esc(st.evidence);
+    return '<tr><td>'+c.id+'</td><td>'+c.priority+'</td><td>'+badgeCell(st.verdict)+'</td>'+
+      '<td>'+esc(c.title)+'</td><td>'+(note||'—')+'</td></tr>';
+  }).join("");
+
+  var sign = SIGN_ROLES.map(function(r){
+    var s = state.signoff[r[0]];
+    return '<tr><td>'+r[1]+'</td><td>'+(esc(s.name)||"—")+' &middot; '+(esc(s.date)||"—")+' &middot; '+(esc(s.result)||"—")+'</td></tr>';
+  }).join("");
+
+  document.getElementById("report").innerHTML =
+    '<div class="rpt">'+
+      '<header class="rpt-hd"><div class="rpt-logo">'+RPT_LOGO+'</div>'+
+        '<h1>'+esc(SUITE_TITLE)+' &mdash; Test Completion Report</h1>'+
+        '<p class="rpt-sub">Test results &mdash; a dated, signed completion report.</p></header>'+
+      '<table class="rpt-meta">'+meta+'</table>'+
+      verdict + tiles +
+      '<h2 class="rpt-h2">Results detail</h2>'+
+      '<table class="rpt-tbl"><tr><th>Case</th><th>Priority</th><th>Result</th><th>Title</th><th>Notes</th></tr>'+rows+'</table>'+
+      '<h2 class="rpt-h2">Sign-off</h2>'+
+      '<table class="rpt-sign">'+sign+'</table>'+
+      '<p class="rpt-foot">Dollar Tree &middot; '+esc(SUITE_TITLE)+'. Test cases mirror the QA Testing Guide (single source of truth). Self-contained; results stored only in this browser until you print or export.</p>'+
+    '</div>';
+}
+// RPT-BUILDER:END
+
+function renderAll(){
+  bindCaseDelegation(); bindSignDelegation();
+  renderPreamble(); renderLoadNotice(); renderHeader(); renderSignoff();
+  renderDashboard(); renderCases();
+  setSaveStatus(state.resumed ? "Resumed run from saved data" : "Ready");
+}
+renderAll();
+</script>
+</body></html>
