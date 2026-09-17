@@ -241,13 +241,13 @@ var CASES = [
 
   { id:"TC-02", section:"setup", priority:"CORE",
     title:"Register the server with Claude Code",
-    pre:"TC-01 passed. Decide whether you are testing the published npm package or a local build; record which in the run header Build field.",
+    pre:"TC-01 passed. Decide whether you are testing a local build or the published npm package; record which in the run header Build field. The npm form only works after the package has been published: check with   npm view clarion-lsp-mcp version   and if that prints a 404, use the local build.",
     steps:[
-      "For the local build, run: claude mcp add clarion-lsp -- node C:\\Projects\\GitHub\\clarion-lsp-mcp\\dist\\index.js   (adjust the path). For the npm package, run instead: claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp",
+      "For a local build, first run in the repo folder: npm run build   then register from any folder: claude mcp add -s user clarion-lsp -- node C:\\Projects\\GitHub\\clarion-lsp-mcp\\dist\\index.js   (adjust the path). For the published npm package, run instead: claude mcp add -s user clarion-lsp -- cmd /c npx -y clarion-lsp-mcp",
       "Run: claude mcp list",
       "Run: claude mcp get clarion-lsp"
     ],
-    expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows the command you registered with scope local or user and no error. If the list shows clarion-lsp as failed or disconnected, record FAIL and paste the output into Notes." },
+    expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows Status: Connected, scope User config, and the command you registered. If it shows failed, disconnected, or CONNECTION_CLOSED, the command could not start: for the npm form that means the package is not published yet (re-register with the local build); for the local build run   node <path>\\dist\\index.js   by hand and paste whatever it prints into Notes, then record FAIL." },
 
   { id:"TC-03", section:"setup", priority:"CORE",
     title:"Tools are visible inside a Claude Code session",

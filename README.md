@@ -19,6 +19,15 @@ solution.
 
 ## Install
 
+Not yet published to npm. Until it is, build and register the local copy:
+
+    git clone https://github.com/bill-atchison/clarion-lsp-mcp
+    cd clarion-lsp-mcp && npm install && npm run build
+    claude mcp add -s user clarion-lsp -- node <full path>\clarion-lsp-mcp\dist\index.js
+
+Registering the `npx` form below before the package is published makes the
+host report `CONNECTION_CLOSED`, because `npx` cannot download it.
+
 Claude Code:
 
     claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp
