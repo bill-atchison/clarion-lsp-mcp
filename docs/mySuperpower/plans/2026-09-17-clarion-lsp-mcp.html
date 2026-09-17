@@ -523,7 +523,8 @@ export function buildPaths(clarion: ClarionRoot, solutionFile: string,
 <pre><code>// test/fake-server.mjs
 // Minimal stand-in for the Clarion language server. Speaks LSP over stdio.
 // Env: FAKE_PROJECT_DIR (project path), FAKE_REDIR_PATH (findFile answer for redir.inc),
-//      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover).
+//      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover),
+//      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics).
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 
 const conn = createMessageConnection(
@@ -540,6 +541,7 @@ conn.onNotification("clarion/updatePaths", p =&gt; {
     { solutionFilePath: p.solutionFilePath, projectCount: 1 });
 });
 function publish(uri, text) {
+  if (process.env.FAKE_NO_DIAGNOSTICS) return;
   const diagnostics = text.includes("BAD")
     ? [{ severity: 1, range: r(0, 0, 0, 3), message: "Unknown identifier BAD" }] : [];
   conn.sendNotification("textDocument/publishDiagnostics", { uri, diagnostics });
@@ -670,9 +672,11 @@ describe("LspClient", () =&gt; {
     expect(client.running).toBe(false);
   });
 
-  it("round-trips Windows paths through file URIs", () =&gt; {
+  it("uses the server's canonical URI form and round-trips Windows paths", () =&gt; {
     const p = "C:\\Work\\App\\main.clw";
+    expect(toUri(p)).toBe("file:///c%3A/Work/App/main.clw");
     expect(fromUri(toUri(p))).toBe(p);
+    expect(fromUri("file:///C:/fake/main.clw")).toBe("C:\\fake\\main.clw");
   });
 });</code></pre>
 </li>
@@ -699,8 +703,13 @@ export interface Position { line: number; character: number; }
 export interface Range { start: Position; end: Position; }
 export interface Diagnostic { severity?: number; range: Range; message: string; }
 
-export const toUri = (p: string) =&gt; pathToFileURL(p).href;
-export const fromUri = (u: string) =&gt; fileURLToPath(u);
+/** The server's canonical form is VS Code's: lower-case drive, encoded colon (file:///c%3A/...). */
+export const toUri = (p: string) =&gt;
+  pathToFileURL(p).href.replace(/^file:\/\/\/([A-Za-z]):/, (_, d: string) =&gt; `file:///${d.toLowerCase()}%3A`);
+export const fromUri = (u: string) =&gt; {
+  const p = fileURLToPath(u.replace(/^file:\/\/\/([A-Za-z])%3A/i, "file:///$1:"));
+  return /^[a-z]:/.test(p) ? p[0].toUpperCase() + p.slice(1) : p;
+};
 const sleep = (ms: number) =&gt; new Promise&lt;void&gt;(r =&gt; setTimeout(r, ms));
 
 export class LspClient {
@@ -710,7 +719,7 @@ export class LspClient {
   private openDocs = new Map&lt;string, string&gt;();      // uri -&gt; last text sent
   private versions = new Map&lt;string, number&gt;();
   private waiters = new Map&lt;string, Array&lt;(d: Diagnostic[]) =&gt; void&gt;&gt;();
-  private readyResolve?: () =&gt; void;
+  private readyResolve?: (p: { solutionFilePath?: string } | undefined) =&gt; void;
   readonly diagnostics = new Map&lt;string, Diagnostic[]&gt;();
   readonly stderrTail: string[] = [];
   notificationCount = 0;
@@ -740,7 +749,7 @@ export class LspClient {
     conn.onNotification((method: string, params: unknown) =&gt; {
       this.notificationCount++;
       if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; diagnostics: Diagnostic[] });
-      if (method === "clarion/solutionReady") this.readyResolve?.();
+      if (method === "clarion/solutionReady") this.readyResolve?.(params as { solutionFilePath?: string });
     });
     conn.onRequest(() =&gt; null);            // server-to-client requests we do not implement
     conn.onError(e =&gt; this.stderrTail.push(`jsonrpc error: ${String(e[0])}`));
@@ -752,7 +761,12 @@ export class LspClient {
   }
 
   async openSolution(params: UpdatePathsParams): Promise&lt;boolean&gt; {
-    const ready = new Promise&lt;boolean&gt;(r =&gt; { this.readyResolve = () =&gt; r(true); });
+    // solutionReady is a notification, not a reply: match it to this call by solution path so a
+    // stale notification from an earlier open_solution cannot resolve this one.
+    const want = params.solutionFilePath.toLowerCase();
+    const ready = new Promise&lt;boolean&gt;(r =&gt; {
+      this.readyResolve = p =&gt; { if ((p?.solutionFilePath ?? "").toLowerCase() === want) r(true); };
+    });
     await this.notify("clarion/updatePaths", params);
     return Promise.race([ready, sleep(this.opts.readyTimeoutMs ?? READY_TIMEOUT_MS).then(() =&gt; false)]);
   }
@@ -1289,17 +1303,10 @@ describe("diagnostics and project files", () =&gt; {
   });
 
   it("reports pending:true when no diagnostics arrive in time", async () =&gt; {
-    h = await connect({ FAKE_SLOW: "1" });   // fake never publishes because it never indexes
+    h = await connect({ FAKE_NO_DIAGNOSTICS: "1" });   // harness sets diagnosticsTimeoutMs to 1000
     const sln = solution();
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
-    h.session.client!.diagnostics.clear();
-    // Force a wait with nothing to answer it: open a doc the fake will not diagnose.
-    // FAKE_SLOW does not stop publishing, so instead shorten the wait to zero and use a fresh file:
-    writeFileSync(file, "  X\n");
-    const c = h.session.client!;
-    const origWait = c.waitForDiagnostics.bind(c);
-    c.waitForDiagnostics = (uri) =&gt; origWait(uri, 0);
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
     expect(r).toEqual({ pending: true, count: 0, diagnostics: [] });
   });
@@ -1387,7 +1394,7 @@ describe("crash recovery", () =&gt; {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
     const pid1 = (await h.call("lsp_debug_status")).data.pid;
-    h.session.client!["child"]!.kill();                     // simulate a crash
+    process.kill(pid1);                                     // simulate a crash
     await new Promise(r =&gt; setTimeout(r, 300));
     expect((await h.call("lsp_debug_status")).data.running).toBe(false);
     const r = await h.call("lsp_hover", { file_path: file, line: 0, character: 0 });
@@ -1557,7 +1564,7 @@ describe.skipIf(!clarion)("real Clarion language server", () =&gt; {
   });
 
   it("survives a kill", async () =&gt; {
-    h.session.client!["child"]!.kill();
+    process.kill((await h.call("lsp_debug_status")).data.pid);
     await new Promise(r =&gt; setTimeout(r, 500));
     const r = await h.call("lsp_hover", { file_path: main, line: 6, character: 0 });
     expect(r.isError, JSON.stringify(r.data)).toBe(false);
@@ -1566,7 +1573,7 @@ describe.skipIf(!clarion)("real Clarion language server", () =&gt; {
 </li>
 <li class="step"><strong>Run it against the local Clarion 12</strong>
 <p class="run">npx vitest run test/integration.test.ts</p>
-<p><b>Expected:</b> 5 passed. If <code>open_solution</code> returns <code>ready:false</code>, read <code>stderrTail</code> in the failure message: the two known risks are the redirection file choice (add a <code>redirection_file</code> argument to <code>open_solution</code> and <code>buildPaths</code> if the server logs missing includes) and URI casing (if the server ignores <code>file:///C:/...</code>, lower-case the drive letter in <code>toUri</code> and keep <code>fromUri</code> unchanged). Fix the root cause in the earlier task's file, keep its tests green, and note the decision in the implementation notes.</p>
+<p><b>Expected:</b> 5 passed. If <code>open_solution</code> returns <code>ready:false</code>, read <code>stderrTail</code> in the failure message: the known risk is the redirection file choice (add a <code>redirection_file</code> argument to <code>open_solution</code> and <code>buildPaths</code> if the server logs missing includes). Fix the root cause in the earlier task's file, keep its tests green, and note the decision in the implementation notes.</p>
 <p>Also confirm the skip path: <code>set CLARION_ROOT=C:\nope &amp;&amp; npx vitest run test/integration.test.ts</code> must report the suite as skipped, not failed. (<code>findClarionRoot</code> throws on a bad override, which the test's try/catch turns into a skip.)</p>
 </li>
 <li class="step"><strong>Write README.md</strong>
@@ -1640,7 +1647,7 @@ background and later calls work. If the tail mentions missing paths, check the
 <!-- ================================================================ -->
 <h2>Risks the implementer should expect</h2>
 <ul>
-  <li><strong>URI form.</strong> The server was written for VS Code, which sends <code>file:///c%3A/...</code>. Node's <code>pathToFileURL</code> sends <code>file:///C:/...</code>. The integration test in Task 9 is the first place this shows. Fix in <code>toUri</code> only.</li>
+  <li><strong>URI form.</strong> The server's canonical URI is VS Code's <code>file:///c%3A/...</code> (confirmed in its <code>UriUtils</code> tests). Task 4's <code>toUri</code> produces exactly that form and <code>fromUri</code> accepts both forms. If the integration test still shows live edits being ignored, the place to look is <code>toUri</code>, nowhere else.</li>
   <li><strong>Redirection file.</strong> The spec's heuristic may not match what the IDE passes. Task 9 explains the fallback: an explicit argument, not a smarter guess.</li>
   <li><strong>Server-to-client requests.</strong> The client answers any unknown request with <code>null</code>. If the server asks for <code>workspace/configuration</code> and treats <code>null</code> as fatal, declare no workspace capabilities (already the case) and look at <code>stderrTail</code>.</li>
   <li><strong>Long timers in tests.</strong> The fake server exits on <code>exit</code>; every test's <code>afterEach</code> calls <code>stop()</code>. A test that forgets this leaves a child running and vitest hangs. The harness's <code>close()</code> handles it.</li>
