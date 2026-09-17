@@ -205,4 +205,40 @@ export function registerTools(server: McpServer, s: Session): void {
     for (const dc of we.documentChanges ?? []) if ("edits" in dc) push(dc.textDocument.uri, dc.edits);
     return { edits: rows };
   })());
+
+  server.registerTool("lsp_diagnostics", {
+    description: "Current errors and warnings for a file. pending:true means the server has not answered " +
+      "within 3 seconds; treat that as unknown, not clean.",
+    inputSchema: { file_path: z.string() },
+  }, async a => guard(async () => withClient(s, async c => {
+    const file = checkFile(a.file_path);
+    const { uri, changed } = await c.openDocument(file);
+    const list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
+    if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
+    const diagnostics = list.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
+      character: d.range.start.character, message: d.message }));
+    return { pending: false, count: diagnostics.length, diagnostics };
+  }))());
+
+  server.registerTool("get_project_source_files", {
+    description: "All .clw and .inc files in the open solution, absolute paths grouped by project.",
+  }, async () => guard(async () => withClient(s, async c => {
+    type Project = { name: string; path: string; guid: string };
+    type ProjFile = { name: string; relativePath: string };
+    const tree = await c.request<{ projects: Project[] }>("clarion/getSolutionTree");
+    const out = [];
+    for (const p of tree.projects) {
+      const { files } = await c.request<{ files: ProjFile[] }>("clarion/getProjectFiles", { projectGuid: p.guid });
+      const resolved: string[] = [], unresolved: string[] = [];
+      for (const f of files) {
+        if (!/\.(clw|inc)$/i.test(f.name)) continue;
+        const direct = path.join(p.path, f.relativePath);
+        if (existsSync(direct)) { resolved.push(direct); continue; }
+        const hit = await c.request<{ path?: string } | null>("clarion/findFile", { filename: f.name });
+        if (hit?.path && existsSync(hit.path)) resolved.push(hit.path); else unresolved.push(f.name);
+      }
+      out.push({ project: p.name, files: resolved, unresolved });
+    }
+    return out;
+  }))());
 }

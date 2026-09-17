@@ -150,6 +150,16 @@ consecutive full-suite runs after raising it. This only affects test fixtures, n
 timeouts <code>LspClient</code> itself uses against a real server.</p>
 </div>
 
+<div class="entry">
+<span class="tag">Task 7</span>
+<p><code>lsp_diagnostics</code>: applied the same precedence fix as Task 6 (moved
+<code>checkFile</code> inside the <code>withClient</code> callback rather than before it), for
+consistency with the other file-taking tools and so "no solution open" always wins over "file not
+found" here too. No test exercises this exact combination for <code>lsp_diagnostics</code>, but leaving
+the ordering inconsistent between tools with an otherwise identical guard shape would be its own latent
+bug.</p>
+</div>
+
 <h2>Decisions not covered by the plan</h2>
 <div class="entry">
 <span class="tag">General</span>

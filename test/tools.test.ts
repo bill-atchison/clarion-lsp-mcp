@@ -114,3 +114,40 @@ describe("position tools", () => {
     expect(bad.data.error).toMatch(/cannot be renamed/);
   });
 });
+
+describe("diagnostics and project files", () => {
+  it("returns cached diagnostics for an unchanged file and fresh ones after an edit", async () => {
+    h = await connect();
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data)
+      .toEqual({ pending: false, count: 0, diagnostics: [] });
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data.pending).toBe(false);
+    writeFileSync(file, "  BAD\n");
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: false, count: 1,
+      diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
+  });
+
+  it("reports pending:true when no diagnostics arrive in time", async () => {
+    h = await connect({ FAKE_NO_DIAGNOSTICS: "1" });   // harness sets diagnosticsTimeoutMs to 1000
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: true, count: 0, diagnostics: [] });
+  });
+
+  it("lists absolute .clw/.inc paths per project, resolves redirected files, and reports unresolved ones", async () => {
+    const sln = solution();
+    writeFileSync(path.join(dir, "main.clw"), "");
+    const redirDir = mkdtempSync(path.join(tmpdir(), "redir-"));
+    const redir = path.join(redirDir, "redir.inc"); writeFileSync(redir, "");
+    h = await connect({ FAKE_PROJECT_DIR: dir, FAKE_REDIR_PATH: redir });
+    await h.call("open_solution", { solution_path: sln });
+    const r = (await h.call("get_project_source_files")).data;
+    expect(r).toEqual([{ project: "Fake", files: [path.join(dir, "main.clw"), redir], unresolved: ["ghost.inc"] }]);
+    rmSync(redirDir, { recursive: true, force: true });
+  });
+});
