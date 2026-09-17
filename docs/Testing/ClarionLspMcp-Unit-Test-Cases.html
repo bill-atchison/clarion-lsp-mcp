@@ -247,7 +247,7 @@ var CASES = [
       "Run: claude mcp list",
       "Run: claude mcp get clarion-lsp"
     ],
-    expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows Status: Connected, scope User config, and the command you registered. If it shows failed, disconnected, or CONNECTION_CLOSED, the command could not start: for the npm form that means the package is not published yet (re-register with the local build); for the local build run   node <path>\\dist\\index.js   by hand and paste whatever it prints into Notes, then record FAIL." },
+    expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows Status: Connected, scope User config, and the command you registered. If it shows failed, disconnected, or CONNECTION_CLOSED, the command could not start: for the npm form that means the package is not published yet (re-register with the local build); for the local build run   node <path>\\dist\\index.js   by hand and paste whatever it prints into Notes, then record FAIL. If claude mcp get shows the right command but a Claude Code session still fails, look for a .mcp.json in the solution folder or any parent folder: a project-scope entry there overrides the user-scope one. Remove or correct it, then restart the session." },
 
   { id:"TC-03", section:"setup", priority:"CORE",
     title:"Tools are visible inside a Claude Code session",

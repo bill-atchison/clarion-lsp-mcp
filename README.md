@@ -92,9 +92,11 @@ the first `.red` in `<ClarionRoot>\bin`.
 
 ## Troubleshooting
 
-- **No tools listed in the host.** The command failed to start. Run
-  `cmd /c npx -y clarion-lsp-mcp` in a prompt; it should wait silently.
-  Whatever it prints instead is the cause.
+- **No tools listed, or `CONNECTION_CLOSED`.** The command failed to start.
+  In Claude Code, `claude mcp get clarion-lsp` from the solution folder shows
+  which registration wins; a project-scope `.mcp.json` in the folder or a
+  parent overrides user scope. The server's stderr is in
+  `%LOCALAPPDATA%\claude-cli-nodejs\Cache\<project>\mcp-logs-clarion-lsp\`.
 - **"No Clarion install with the Clarion Assistant addin found".** Set
   `CLARION_ROOT`, and confirm the addin's `lsp-server` folder exists there.
 - **`ready: false` with a `stderrTail`.** Usually a big solution still indexing.
