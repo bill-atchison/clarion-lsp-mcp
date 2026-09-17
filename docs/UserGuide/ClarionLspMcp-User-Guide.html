@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarion LSP MCP User Guide</title>
+<style>
+  :root{
+    --paper:#f4efe1; --ink:#221f18; --maroon:#8a2b27; --meta-bg:#e9e1cd;
+    --label:#6d5f4e; --value:#2b2820; --amber:#a8762b; --rule:#d5cbb3;
+    --serif:Georgia,'Times New Roman',serif;
+    --mono:ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);padding:3.5rem 2rem;font-size:1.04rem;line-height:1.6;}
+  .wrap{max-width:900px;margin:0 auto;}
+  header .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.35em;font-size:.8rem;font-weight:700;color:var(--maroon);margin:0 0 1.1rem;}
+  header h1{font-weight:700;font-size:clamp(2.4rem,6vw,3.6rem);line-height:1.04;letter-spacing:-.01em;margin:0 0 .9rem;}
+  header .sub{font-style:italic;font-weight:700;font-size:clamp(1.2rem,2.4vw,1.5rem);line-height:1.3;margin:0 0 1.6rem;max-width:52ch;}
+  header .meta{font-family:var(--mono);color:var(--label);font-size:.92rem;margin:0 0 2.5rem;}
+  main p,main ul,main ol{max-width:84ch;}
+  h2{font-size:1.7rem;line-height:1.15;font-weight:700;letter-spacing:-.01em;margin:3rem 0 1rem;padding-bottom:.4rem;border-bottom:2px solid var(--maroon);}
+  h3{font-size:1.2rem;font-weight:700;margin:1.9rem 0 .5rem;}
+  h5{font-size:1rem;margin:0 0 .3rem;}
+  p{margin:0 0 .9rem;}
+  .lead{font-size:1.12rem;}
+  ul,ol{margin:0 0 1rem;padding-left:1.4rem;}
+  li{margin-bottom:.35rem;}
+  li::marker{color:var(--maroon);}
+  code{font-family:var(--mono);font-size:.88em;background:var(--meta-bg);padding:.08em .35em;border-radius:4px;}
+  pre{background:var(--meta-bg);border-left:4px solid var(--amber);border-radius:0 10px 10px 0;padding:.9rem 1.2rem;margin:.5rem 0 .6rem;font-family:var(--mono);font-size:.86rem;line-height:1.5;overflow-x:auto;max-width:100%;}
+  pre code{background:none;padding:0;font-size:inherit;}
+  table{width:100%;border-collapse:collapse;margin:0 0 1.4rem;font-size:.96rem;}
+  th{text-align:left;font-weight:700;padding:.5rem .7rem;border-bottom:2px solid var(--maroon);vertical-align:bottom;}
+  td{padding:.5rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td code{white-space:nowrap;}
+  .crumbs{font-family:var(--mono);font-size:.85rem;color:var(--label);margin:0 0 1.5rem;}
+  .crumbs a{color:var(--label);text-decoration:none;}
+  .crumbs .sep{margin:0 .5rem;}
+  .card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:0 0 1.2rem;}
+  .card{background:var(--meta-bg);border-radius:14px;border-left:6px solid var(--maroon);padding:1rem 1.2rem;}
+  .card p{margin:0;font-size:.96rem;}
+  .chip{display:inline-block;font-family:var(--mono);font-size:.8rem;border:1px solid var(--amber);color:var(--amber);border-radius:999px;padding:.12rem .7rem;margin:0 .4rem .4rem 0;}
+  .toc{background:var(--meta-bg);border-radius:14px;padding:1rem 1.4rem;margin:1.2rem 0 0;}
+  .toc h2{border:none;margin:0 0 .4rem;font-size:1.05rem;padding:0;}
+  .toc ul{margin:0;columns:2;}
+  .toc a{color:var(--maroon);}
+  ol.steps{counter-reset:s;list-style:none;padding-left:0;}
+  ol.steps li{counter-increment:s;position:relative;padding-left:2.4rem;margin-bottom:.8rem;}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:.1em;width:1.7em;height:1.7em;border-radius:50%;background:var(--maroon);color:var(--paper);font-family:var(--mono);font-size:.85rem;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .callout{background:var(--meta-bg);border-left:6px solid var(--amber);border-radius:0 14px 14px 0;padding:.9rem 1.3rem;margin:0 0 1.4rem;max-width:none;}
+  .callout b{display:block;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;font-size:.78rem;color:var(--amber);margin-bottom:.25rem;}
+  .callout.warn,.callout.danger{border-left-color:var(--maroon);}
+  .callout.warn b,.callout.danger b{color:var(--maroon);}
+  .btn{display:inline-block;font-family:var(--mono);font-size:.85rem;border:1px solid var(--maroon);color:var(--maroon);border-radius:999px;padding:.3rem .9rem;text-decoration:none;}
+  footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:var(--mono);color:var(--label);font-size:.85rem;}
+  @media (max-width:700px){body{padding:2rem 1rem;} .card-grid{grid-template-columns:1fr;} .toc ul{columns:1;}}
+  @media print{body{background:#fff;padding:0;} .card,.callout,.toc,pre,code{background:#eee;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="eyebrow">Guide &middot; Clarion LSP MCP</p>
+  <h1>Clarion LSP MCP User Guide</h1>
+  <p class="sub">Install, register, and diagnose the server that lets an AI assistant read a Clarion solution with the IDE closed.</p>
+  <p class="meta">Applies to version 0.1.0 &middot; Windows workstations with Clarion 11.1 or 12 and the Clarion Assistant addin</p>
+</header>
+<main id="top">
+  <div class="crumbs"><a href="#">0.1.0</a><span class="sep">&rsaquo;</span><a href="#">User Guides</a><span class="sep">&rsaquo;</span><b>Clarion LSP MCP</b></div>
+  <h2>At a glance</h2>
+  <div class="card-grid">
+    <div class="card">
+      <h5>Purpose</h5>
+      <p>Lets AI coding assistants (Claude Code, Codex, and any other MCP host) read a Clarion solution through the Clarion Assistant language server while the Clarion IDE is closed: go to definition, find references, hover, symbols, diagnostics, and rename proposals.</p>
+    </div>
+    <div class="card">
+      <h5>Audience</h5>
+      <p>Clarion developers who want their AI assistant to understand a solution, and the support staff who install the server on a workstation, register it with the AI tool, and diagnose it when the tool cannot see the solution.</p>
+    </div>
+    <div class="card">
+      <h5>Prerequisites</h5>
+      <p>Windows 10 or 11. Node.js 20 or newer. A Clarion install (11.1 or 12) that already has the Clarion Assistant IDE addin, which supplies the language server. The AI tool the developer uses must support stdio MCP servers.</p>
+    </div>
+  </div>
+  <p>
+    <span class="chip">Feature: Clarion LSP MCP</span>
+    <span class="chip">Version: 0.1.0</span>
+    <span class="chip">Repo: github.com/bill-atchison/clarion-lsp-mcp</span>
+  </p>
+  <div class="toc">
+    <h2>On this page</h2>
+    <ul>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#config">Configuration</a></li>
+      <li><a href="#procedures">Procedures</a></li>
+      <li><a href="#tools">Tool reference</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#reference">Reference</a></li>
+    </ul>
+  </div>
+
+  <h2 id="overview">Overview</h2>
+  <p class="lead">The Clarion Assistant IDE addin ships a full Clarion language server inside the Clarion install folder, but only the running IDE could use it. Clarion LSP MCP is a small program, published on npm as <code>clarion-lsp-mcp</code>, that starts that same language server on its own, points it at a solution, and exposes twelve tools to whatever AI assistant is registered to use it. Nothing is copied or redistributed: the server runs from the existing Clarion install.</p>
+  <p>When the developer's AI tool starts, it launches <code>clarion-lsp-mcp</code> as a background process. Nothing else happens until the assistant calls <code>open_solution</code>. At that point the program finds the Clarion install, starts the language server from it, tells the server which <code>.sln</code> to index, and waits up to 30 seconds for the server to report ready. After that, every question the assistant asks (where is this procedure defined, does this file have errors) is forwarded to the server and the answer is returned as plain file paths and line numbers.</p>
+  <div class="callout note"><b>Note</b> This guide covers installing, registering, and diagnosing the server. It does not cover the Clarion IDE, the Clarion Assistant addin itself, or the AI tools' own installation. The server is read-only: it never edits source files, project files, or <code>.app</code> files, and it never builds or generates code. The one tool that proposes changes, <code>lsp_rename</code>, returns a list of edits for the developer to review and never applies them.</div>
+
+  <h2 id="config">Configuration</h2>
+  <p>There is no configuration file. Behaviour is set by one optional environment variable, by how the server is registered in the AI tool, and by the arguments the assistant passes when it opens a solution.</p>
+  <table>
+    <thead>
+      <tr><th>Setting</th><th>Value</th><th>Where</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>CLARION_ROOT</code></td><td>Clarion install folder, e.g. <code>C:\Clarion12</code></td><td>User or system environment variable</td><td>Optional. When unset, the server scans <code>C:\Clarion*</code> for installs that contain <code>bin\Clarion.exe</code> and the Clarion Assistant addin's <code>lsp-server</code> folder, and picks the highest version. Set it when Clarion is on another drive or the developer has several installs and needs a specific one.</td></tr>
+      <tr><td>Host registration</td><td><code>cmd /c npx -y clarion-lsp-mcp</code></td><td>The AI tool's MCP configuration (see Procedures)</td><td>The <code>cmd /c</code> prefix is required on Windows because <code>npx</code> is a batch file and some hosts cannot launch it directly. The <code>-y</code> lets npx download the package the first time without a prompt.</td></tr>
+      <tr><td><code>solution_path</code></td><td>Absolute path to a <code>.sln</code></td><td>Argument to the <code>open_solution</code> tool</td><td>Optional. When omitted, the server uses the single <code>.sln</code> in the working directory the AI tool started in. Several <code>.sln</code> files there produce an error that lists the candidates; none produces an error asking for a path.</td></tr>
+      <tr><td><code>configuration</code></td><td><code>Debug</code> (default) or <code>Release</code></td><td>Argument to <code>open_solution</code></td><td>Passed to the language server as its build configuration. Use the one the developer builds with.</td></tr>
+      <tr><td><code>clarion_root</code></td><td>Clarion install folder</td><td>Argument to <code>open_solution</code></td><td>Optional per-call override of <code>CLARION_ROOT</code>. Rarely needed.</td></tr>
+      <tr><td>Redirection file</td><td>A <code>.red</code> beside the <code>.sln</code>, otherwise the first <code>.red</code> in <code>&lt;ClarionRoot&gt;\bin</code></td><td>Chosen automatically</td><td>Not configurable in 0.1.0. The chosen file is reported by <code>get_solution_info</code> as <code>redirectionFile</code>.</td></tr>
+      <tr><td>Node.js</td><td>20 or newer on PATH</td><td>Workstation</td><td>Only needed to run the MCP program itself. The language server uses the <code>node.exe</code> that ships inside the Clarion Assistant addin folder.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><b>Caution</b> If <code>CLARION_ROOT</code> points at a Clarion install that does not have the Clarion Assistant addin, every <code>open_solution</code> call fails with a message naming the folder it expected (<code>accessory\addins\ClarionAssistant\lsp-server</code>). Either install the addin into that Clarion, or unset the variable so auto-detection can find an install that has it.</div>
+
+  <h2 id="procedures">Procedures</h2>
+
+  <h3>Install and register with Claude Code</h3>
+  <ol class="steps">
+    <li>Confirm Node.js 20 or newer: open a command prompt and run <code>node --version</code>. If it is missing or older, install the current LTS from nodejs.org and reopen the prompt.</li>
+    <li>Confirm the language server is present: check that <code>C:\Clarion12\accessory\addins\ClarionAssistant\lsp-server\node.exe</code> exists (substitute the developer's Clarion folder). If it does not, the Clarion Assistant addin is not installed; install it before continuing.</li>
+    <li>Register the server once, from any folder:
+      <pre><code>claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp</code></pre></li>
+    <li>Start Claude Code inside the folder that holds the developer's <code>.sln</code> and ask it to run diagnostics on the solution, or run the <code>/lsp-diagnostics</code> skill if the clarion-assistant plugin is installed.</li>
+    <li>Confirm the first run downloaded the package: the first <code>open_solution</code> can take a minute while npx fetches it. Later starts are immediate.</li>
+  </ol>
+  <div class="callout tip"><b>Tip</b> If the developer's PC has no internet access or npx is blocked by policy, install the package globally on a connected machine with <code>npm install -g clarion-lsp-mcp</code>, copy the resulting folder, and register the command as <code>node &lt;path&gt;\clarion-lsp-mcp\dist\index.js</code> instead of <code>npx</code>.</div>
+
+  <h3>Register with Codex CLI</h3>
+  <ol class="steps">
+    <li>Open <code>%USERPROFILE%\.codex\config.toml</code> in a text editor. Create it if it does not exist.</li>
+    <li>Add this block and save:
+      <pre><code>[mcp_servers.clarion-lsp]
+command = "cmd"
+args = ["/c", "npx", "-y", "clarion-lsp-mcp"]</code></pre></li>
+    <li>Restart Codex. The tools appear under the <code>clarion-lsp</code> server name.</li>
+  </ol>
+
+  <h3>Register with any other MCP host</h3>
+  <ol class="steps">
+    <li>Find the host's MCP servers configuration file (most use a JSON file with an <code>mcpServers</code> object).</li>
+    <li>Add this entry:
+      <pre><code>{ "mcpServers": { "clarion-lsp": { "command": "cmd", "args": ["/c", "npx", "-y", "clarion-lsp-mcp"] } } }</code></pre></li>
+    <li>Restart the host and confirm a tool named <code>open_solution</code> is listed.</li>
+  </ol>
+
+  <h3>Verify the server works on a workstation</h3>
+  <ol class="steps">
+    <li>Close the Clarion IDE, so there is no doubt the answers come from this server.</li>
+    <li>In the AI tool, inside the solution folder, ask the assistant to open the solution. It calls <code>open_solution</code>. The reply must show <code>ready: true</code>, the Clarion root it found, and the Clarion version.</li>
+    <li>Ask for the list of source files. The assistant calls <code>get_project_source_files</code>; the reply lists every <code>.clw</code> and <code>.inc</code> per project with absolute paths.</li>
+    <li>Ask whether a specific file has errors. The assistant calls <code>lsp_diagnostics</code>; the reply shows <code>pending: false</code> and a count. To prove the server is really analysing, have the developer add an unterminated <code>CASE</code> block to a scratch copy and ask again: the count must become at least one.</li>
+    <li>Ask for the status. The assistant calls <code>lsp_debug_status</code>; <code>running: true</code> with a numeric <code>pid</code> confirms the language server process is alive.</li>
+  </ol>
+  <div class="callout success"><b>Success</b> <code>open_solution</code> returned <code>ready: true</code>, <code>get_project_source_files</code> listed the expected files, and <code>lsp_diagnostics</code> answered with <code>pending: false</code>. The workstation is set up correctly.</div>
+
+  <h3>Update or remove</h3>
+  <ol class="steps">
+    <li>Update: nothing to do when registered through <code>npx -y</code>; npx checks for the latest published version at each start. To pin a version, register <code>npx -y clarion-lsp-mcp@0.1.0</code> instead.</li>
+    <li>Remove from Claude Code: <code>claude mcp remove clarion-lsp</code>. For other hosts, delete the entry from their configuration file.</li>
+    <li>The Clarion install and the addin are untouched by install or removal. No files are written anywhere except npm's cache.</li>
+  </ol>
+
+  <h2 id="tools">Tool reference</h2>
+  <p>These are the tool names the assistant uses. Support staff do not call them directly, but they appear in the assistant's transcript and in error reports. Line and character numbers are zero-based. All file paths are absolute Windows paths.</p>
+  <table>
+    <thead>
+      <tr><th>Tool</th><th>What it does</th><th>Healthy reply looks like</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>open_solution</code></td><td>Starts the language server and indexes a solution. Must be called first.</td><td><code>ready: true</code>, plus solution path, Clarion root, version, and redirection file.</td></tr>
+      <tr><td><code>lsp_start</code></td><td>Same as <code>open_solution</code> with no arguments. Kept for compatibility with the clarion-assistant plugin skills.</td><td>Same as above.</td></tr>
+      <tr><td><code>get_solution_info</code></td><td>Reports the open solution without touching the server.</td><td>Solution path and <code>ready</code> flag, or <code>solution: null</code> if nothing is open.</td></tr>
+      <tr><td><code>get_project_source_files</code></td><td>Lists <code>.clw</code> and <code>.inc</code> files per project.</td><td>One entry per project with a <code>files</code> list; an <code>unresolved</code> list that is empty.</td></tr>
+      <tr><td><code>lsp_definition</code>, <code>lsp_references</code>, <code>lsp_hover</code></td><td>Answers a question about the symbol at a file position.</td><td>A list of file path, line, character; or hover text.</td></tr>
+      <tr><td><code>lsp_document_symbols</code>, <code>lsp_find_symbol</code></td><td>Lists symbols in one file, or searches by name across the solution.</td><td>Names with kinds and positions.</td></tr>
+      <tr><td><code>lsp_diagnostics</code></td><td>Errors and warnings for one file, re-reading it from disk first so recent edits count.</td><td><code>pending: false</code> with a count. <code>pending: true</code> means no answer within 3 seconds of a changed file, or nothing cached yet for an unchanged one; treat it as unknown, not clean.</td></tr>
+      <tr><td><code>lsp_rename</code></td><td>Proposes a rename. Never writes to disk.</td><td>An <code>edits</code> list, or an <code>error</code> saying the symbol cannot be renamed there.</td></tr>
+      <tr><td><code>lsp_debug_status</code></td><td>Health check.</td><td><code>running: true</code>, a <code>pid</code>, counts of notifications and open documents, and the last lines the server wrote to its error output.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+  <table>
+    <thead>
+      <tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>The AI tool does not list any <code>clarion-lsp</code> tools.</td><td>The registration command could not start. On Windows this is almost always <code>npx</code> launched without <code>cmd /c</code>, or Node.js missing from PATH.</td><td>Re-register with the exact command in Procedures. Run <code>cmd /c npx -y clarion-lsp-mcp</code> by hand in a command prompt: it should sit silently waiting for input (press Ctrl+C to stop). Any error it prints is the cause.</td></tr>
+      <tr><td><code>open_solution</code> error: "No Clarion install with the Clarion Assistant addin found under C:\Clarion*".</td><td>Clarion is on another drive or folder name, or the addin is not installed.</td><td>Set <code>CLARION_ROOT</code> to the install folder and restart the AI tool. If the addin's <code>lsp-server</code> folder is missing from that install, install the Clarion Assistant addin.</td></tr>
+      <tr><td><code>open_solution</code> error: "No .sln file in ..." or "Several .sln files in ...".</td><td>The AI tool started in a folder without exactly one solution.</td><td>Have the developer ask the assistant to open the solution by full path, or start the AI tool inside the solution folder.</td></tr>
+      <tr><td><code>open_solution</code> returns <code>ready: false</code> with a <code>stderrTail</code>.</td><td>The language server started but did not finish indexing within 30 seconds. On large solutions this is normal; the server keeps indexing and later calls work. If <code>stderrTail</code> mentions a rejected payload or missing paths, the redirection file is wrong.</td><td>Wait a minute and try a tool such as <code>lsp_document_symbols</code>. If it works, no action. If <code>stderrTail</code> shows path errors, check that the <code>.red</code> beside the <code>.sln</code> is the one the IDE uses.</td></tr>
+      <tr><td>Every tool replies "No solution open. Call open_solution first."</td><td>The assistant skipped <code>open_solution</code>, or the AI tool was restarted (state does not persist across restarts).</td><td>Ask the assistant to open the solution again.</td></tr>
+      <tr><td><code>lsp_diagnostics</code> keeps returning <code>pending: true</code>.</td><td>The server has not published diagnostics for that file within 3 seconds, or the file has not changed since the last answer and nothing is cached. Common right after opening a big solution.</td><td>Retry once. If it persists, run <code>lsp_debug_status</code>: <code>running: false</code> means the server died (see next row); <code>running: true</code> with a rising notification count means it is still indexing.</td></tr>
+      <tr><td><code>lsp_debug_status</code> shows <code>running: false</code>.</td><td>The language server process exited or crashed.</td><td>No action needed for one crash: the next tool call restarts the server and re-indexes before asking, and a call interrupted by a crash is retried once. If the reply says "failed again after restart", read the included <code>stderrTail</code> and report it with the solution name. Check that antivirus is not blocking <code>node.exe</code> inside the addin folder.</td></tr>
+      <tr><td>Results point at the wrong file, or a symbol is "not found" that clearly exists.</td><td>The solution was indexed with the wrong configuration or redirection file, so include paths differ from what the IDE uses.</td><td>Have the assistant call <code>open_solution</code> with <code>configuration: "Release"</code> if the developer builds Release. Compare <code>redirectionFile</code> from <code>get_solution_info</code> with the <code>.red</code> the IDE shows in project properties.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout danger"><b>Critical</b> Do not delete or "clean up" the <code>accessory\addins\ClarionAssistant\lsp-server</code> folder or its <code>node_modules</code> to free space: that is the language server itself, and both the IDE addin and this MCP stop working. Recovery is reinstalling the Clarion Assistant addin. Likewise, <code>lsp_rename</code> results are proposals only; if an assistant applies a rename across many files, the developer's source control is the only undo. Never apply a rename without reviewing the edit list.</div>
+
+  <h2 id="reference">Reference</h2>
+  <ul>
+    <li>Source and issues: <code>https://github.com/bill-atchison/clarion-lsp-mcp</code></li>
+    <li>Design spec: <code>docs/mySuperpower/specs/2026-09-16-clarion-lsp-mcp-design.html</code> in the repository</li>
+    <li>Implementation plan: <code>docs/mySuperpower/plans/2026-09-17-clarion-lsp-mcp.html</code></li>
+    <li>Implementation notes, including what was learned about the real language server: <code>docs/mySuperpower/implementation-notes/2026-09-17-clarion-lsp-mcp.html</code></li>
+    <li>Developer README with the same install snippets: <code>README.md</code> in the repository</li>
+    <li>QA Test Guide and Unit Test instrument: not produced for this version</li>
+  </ul>
+  <p><a class="btn" href="#top">Back to top</a></p>
+</main>
+<footer>Clarion LSP MCP documentation &middot; version 0.1.0 &middot; github.com/bill-atchison/clarion-lsp-mcp</footer>
+</div>
+</body>
+</html>
