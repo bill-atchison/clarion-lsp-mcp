@@ -108,6 +108,48 @@ implementation are untouched) &mdash; it only fixes a test fixture value and ass
 tuned for a faster/different environment than this one.</p>
 </div>
 
+<div class="entry">
+<span class="tag">Task 6</span>
+<p><code>positional()</code> and the inline <code>lsp_document_symbols</code> handler in
+<code>src/tools.ts</code>: the plan's version called <code>checkFile(a.file_path)</code> before
+<code>withClient(s, ...)</code>. That makes a missing-file error win over a missing-solution error when
+both are true, but the "refuses when no solution is open" test calls <code>lsp_hover</code> with a
+file path (<code>C:\x.clw</code>) that also does not exist, and expects the "No solution open. Call
+open_solution first." message. Fixed by moving <code>checkFile</code> inside the callback
+<code>withClient</code> invokes, so the solution-open guard (which throws before calling the callback at
+all) is always checked first, and the file-existence guard second, before anything reaches the server.
+This matches the spec's error table, which lists "Any tool before open_solution" as its own row ahead of
+"File path outside the solution or missing." No behavior changed for the case both plan and tests actually
+exercise together (open solution + missing file): <code>checkFile</code> still runs, and still throws,
+before <code>openDocument</code> ever touches the server.</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 6</span>
+<p><code>DocSymbol.location</code> in <code>src/tools.ts</code>: the plan typed it as
+<code>{ range: Range }</code>, then cast it to <code>{ uri: string }</code> in
+<code>lsp_find_symbol</code> to read <code>.uri</code>. TypeScript strict mode rejected that cast
+(<code>TS2352</code>: the two object types do not overlap enough to be reinterpreted). Real LSP
+<code>SymbolInformation.location</code> (what <code>workspace/symbol</code> actually returns, including
+the fake server's) is a <code>Location</code>, <code>{ uri, range }</code>, so the type was widened to
+<code>{ uri: string; range: Range }</code> and the cast removed in favor of the properly typed field. No
+runtime behavior changed; this only fixes the type to match the shape already flowing through it.</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 6</span>
+<p><code>test/harness.ts</code>: raised the fake-server client's <code>clientOpts</code> from
+<code>{ readyTimeoutMs: 2000, requestTimeoutMs: 2000, diagnosticsTimeoutMs: 1000 }</code> to
+<code>{ readyTimeoutMs: 5000, requestTimeoutMs: 5000, diagnosticsTimeoutMs: 2000 }</code>. Running
+<code>npx vitest run</code> for the whole suite (all three test files, vitest's parallel workers) hit one
+flaky failure in "opens a solution and reports it" (<code>ready</code> came back <code>false</code>)
+that did not reproduce running <code>test/tools.test.ts</code> alone; the same cold-spawn-plus-ESM-import
+latency noted for Task 4 gets worse under the CPU contention of several test files' child processes
+running at once. The 2000&nbsp;ms budget was occasionally not enough. Confirmed stable across three
+consecutive full-suite runs after raising it. This only affects test fixtures, not the 15s/3s/30s
+timeouts <code>LspClient</code> itself uses against a real server.</p>
+</div>
+
 <h2>Decisions not covered by the plan</h2>
 <div class="entry">
 <span class="tag">General</span>
