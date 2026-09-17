@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarion LSP MCP — Implementation Notes</title>
+<style>
+  body{margin:0;background:#f4efe1;color:#221f18;font-family:Georgia,'Times New Roman',serif;padding:2.5rem 1.5rem;}
+  .wrap{max-width:900px;margin:0 auto;}
+  h1{font-size:2rem;margin:0 0 .3rem;}
+  .sub{color:#6d5f4e;font-family:ui-monospace,Consolas,monospace;font-size:.9rem;margin:0 0 2rem;}
+  h2{font-size:1.3rem;border-bottom:2px solid #8a2b27;padding-bottom:.3rem;margin:2.2rem 0 .8rem;}
+  h3{font-size:1.05rem;margin:1.2rem 0 .4rem;}
+  code{font-family:ui-monospace,Consolas,monospace;background:#e9e1cd;padding:.1em .35em;border-radius:4px;font-size:.9em;}
+  pre{background:#e9e1cd;border-left:4px solid #a8762b;border-radius:0 8px 8px 0;padding:.8rem 1rem;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:.85rem;}
+  .entry{background:#e9e1cd;border-left:6px solid #8a2b27;border-radius:0 12px 12px 0;padding:1rem 1.3rem;margin:0 0 1.1rem;}
+  .entry p{margin:.3rem 0;}
+  .tag{display:inline-block;font-family:ui-monospace,Consolas,monospace;font-size:.75rem;text-transform:uppercase;
+       letter-spacing:.05em;color:#a8762b;border:1px solid #a8762b;border-radius:999px;padding:.1rem .6rem;margin-bottom:.4rem;}
+  ul{padding-left:1.3rem;}
+  li{margin-bottom:.35rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Clarion LSP MCP — Implementation Notes</h1>
+<p class="sub">Running log kept while executing Tasks 1&ndash;8 of docs/mySuperpower/plans/2026-09-17-clarion-lsp-mcp.html on branch cloud/tasks-1-8</p>
+
+<h2>Environment actually used</h2>
+<div class="entry">
+<span class="tag">Platform</span>
+<p>The task instructions said "you are on Linux", but the sandbox this ran in reported
+<code>process.platform === "win32"</code> (Node v20.18.1 under MINGW64/Git Bash on Windows 11).
+No Clarion install exists in this sandbox, so this is functionally the same as a Linux CI agent for
+Tasks 1&ndash;8: no <code>C:\Clarion*</code> install is present, so <code>findClarionRoot()</code> without an
+override still throws "no install found" and every test in Tasks 1&ndash;8 uses the fake server or a
+temp-directory override, exactly as the plan intends.</p>
+<p>One consequence: the Windows-only URI test in <code>test/lsp.test.ts</code>
+(<code>it.skipIf(process.platform !== "win32")(...)</code>) actually <em>ran</em> here instead of being
+skipped, since <code>process.platform</code> is genuinely <code>win32</code>. That is a strictly stronger
+check than the plan anticipated for a Linux agent (it exercised the real Windows path-URI round trip),
+not a gap, so no action was needed.</p>
+</div>
+
+<h2>Deviations from the plan</h2>
+
+<div class="entry">
+<span class="tag">Task 1</span>
+<p><code>@types/node</code> bumped from the plan's <code>^20.0.0</code> to <code>^22.0.0</code>.</p>
+<p><code>npm install</code> failed with an <code>ERESOLVE</code> conflict: <code>vitest@5.0.1</code> declares a
+peer dependency on <code>@types/node@"^22.0.0 || >=24.0.0"</code> (via its own peerDependencies, independent of
+vite's looser <code>^18 || ^20 || >=22</code> range). With <code>@types/node@^20.0.0</code> as written in the
+plan, npm refused to resolve without <code>--legacy-peer-deps</code>. Per the task rules ("use the nearest
+published version and note it"), <code>@types/node</code> was bumped to <code>^22.0.0</code> to satisfy vitest's
+peer requirement rather than forcing an unsound resolution. This is a type-only package; it does not change
+the Node runtime the code executes under (still Node 20.18.1 here, Node &gt;=20 per <code>engines</code>).</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 1</span>
+<p><code>vitest@5.0.1</code> resolved (the plan pins <code>^5.0.0</code>). It declares
+<code>engines.node: "^22.12.0 || ^24.0.0 || >=26.0.0"</code>, which is stricter than this project's own
+<code>engines.node: ">=20"</code>. <code>npm install</code> only warned (<code>EBADENGINE</code>), and
+<code>npx vitest run</code> / <code>npx tsc --noEmit</code> both ran correctly on the actual Node v20.18.1 in
+this sandbox for every task (verified after every task, see test summary in the final report). No downgrade
+was needed in practice, so vitest was kept at <code>^5.0.0</code> as the plan specifies. Flagging this because
+a different Node 20.x patch release could behave differently; if <code>npx vitest run</code> ever fails to
+start on a real Node 20 build agent, downgrade to <code>vitest@^4.1.11</code> (declares
+<code>engines.node: "^20.0.0 || ^22.0.0 || >=24.0.0"</code>), which was confirmed available on the registry
+during this work.</p>
+</div>
+
+<h2>Decisions not covered by the plan</h2>
+<div class="entry">
+<span class="tag">General</span>
+<p>None required beyond the two dependency-resolution notes above &mdash; the plan's code listings were
+followed byte-for-byte for Tasks 1&ndash;8 (types, function bodies, test bodies) since they compiled and
+passed as written.</p>
+</div>
+
+<h2>For the owner, before running Task 9</h2>
+<ul>
+<li>Task 9 (real Clarion 12 integration test, README, package finalization) was intentionally not started.
+It requires a Windows machine with Clarion 12 and the Clarion Assistant addin installed, so that
+<code>findClarionRoot()</code> resolves a real <code>C:\Clarion*</code> install with
+<code>accessory\addins\ClarionAssistant\lsp-server\out\server\src\server.js</code>.</li>
+<li>Before running Task 9, add <code>"os": ["win32"]</code> to <code>package.json</code> as the plan's
+conventions section instructs, right before <code>npm pack</code>.</li>
+<li>If <code>npm install</code> on the Task 9 machine hits the same <code>@types/node</code> ERESOLVE
+conflict noted above, it is already resolved on this branch (<code>@types/node@^22.0.0</code>); no further
+action needed there.</li>
+<li>Everything in Tasks 1&ndash;8 was exercised only against the fake server
+(<code>test/fake-server.mjs</code>) and temp directories; the real server's actual JSON-RPC shapes
+(<code>clarion/updatePaths</code>, <code>clarion/getSolutionTree</code>, <code>clarion/getProjectFiles</code>,
+<code>clarion/findFile</code>) are unverified against Clarion 12 itself until Task 9 runs.</li>
+</ul>
+
+</div>
+</body>
+</html>
