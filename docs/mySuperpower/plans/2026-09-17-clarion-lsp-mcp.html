@@ -578,8 +578,10 @@ conn.onRequest("clarion/getProjectFiles", ({ projectGuid }) =&gt; ({
     { name: "notes.txa", relativePath: "notes.txa" },
   ] : [],
 }));
+// Real server returns { path: "", source: "" } on a miss, never null.
 conn.onRequest("clarion/findFile", ({ filename }) =&gt;
-  filename === "redir.inc" &amp;&amp; process.env.FAKE_REDIR_PATH ? { path: process.env.FAKE_REDIR_PATH } : null);
+  filename === "redir.inc" &amp;&amp; process.env.FAKE_REDIR_PATH
+    ? { path: process.env.FAKE_REDIR_PATH, source: "redirection" } : { path: "", source: "" });
 conn.onRequest("shutdown", () =&gt; null);
 conn.onNotification("exit", () =&gt; process.exit(0));
 conn.listen();</code></pre>
