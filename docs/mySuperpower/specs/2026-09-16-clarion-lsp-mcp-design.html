@@ -250,7 +250,7 @@ omitted, so the server keeps its own defaults. Code lens is never requested by t
 <code>file:///</code> URIs and back so agents never see URIs.</p>
 <table>
   <tr><th>Tool</th><th>Input</th><th>Backed by</th><th>Returns</th></tr>
-  <tr><td><code>open_solution</code></td><td><code>solution_path?</code>, <code>configuration?</code>, <code>clarion_root?</code></td><td>start + updatePaths</td><td><code>{ solution, clarionRoot, clarionVersion, redirectionFile, ready }</code></td></tr>
+  <tr><td><code>open_solution</code></td><td><code>solution_path?</code>, <code>configuration?</code>, <code>clarion_root?</code></td><td>start + updatePaths</td><td><code>{ solution, clarionRoot, clarionVersion, redirectionFile, ready, stderrTail? }</code>; <code>stderrTail</code> present only when <code>ready</code> is false</td></tr>
   <tr><td><code>lsp_start</code></td><td>none</td><td><code>open_solution</code> with defaults</td><td>same as above; kept for skill compatibility</td></tr>
   <tr><td><code>get_solution_info</code></td><td>none</td><td>cached state</td><td><code>{ solution, clarionVersion, redirectionFile, ready }</code> or <code>{ solution: null }</code></td></tr>
   <tr><td><code>get_project_source_files</code></td><td>none</td><td><code>clarion/getSolutionTree</code>, then <code>clarion/getProjectFiles</code> per project GUID</td><td><code>[{ project, files: [absolutePath] }]</code>, <code>.clw</code> and <code>.inc</code> only</td></tr>
