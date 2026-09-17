@@ -167,21 +167,139 @@ bug.</p>
 bodies, test bodies) since they compiled and passed as written.</p>
 </div>
 
-<h2>For the owner, before running Task 9</h2>
+<h2>Task 9: real-server integration test, README, package check</h2>
+
+<div class="entry">
+<span class="tag">Task 9</span>
+<p><strong>This machine has a real Clarion 12 install and ran the integration suite against it</strong>
+(<code>C:\Clarion12</code>, addin server at
+<code>accessory\addins\ClarionAssistant\lsp-server\out\server\src\server.js</code>, version reported as
+<code>12.0.0.14000</code>). <code>test/integration.test.ts</code>, the <code>test/fixtures/HelloLsp</code>
+fixture, and <code>README.md</code> were written exactly as the plan specifies, with one assertion changed
+(below). All 5 integration tests pass against the real server, confirmed stable across three consecutive
+runs. The skip path was verified too: with <code>CLARION_ROOT</code> pointed at a nonexistent folder, the
+suite reports <code>1 skipped (1)</code> / <code>5 skipped (5)</code>, never a failure.</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 9 &mdash; deviation, with evidence</span>
+<p><strong>The plan's "reports an error for a missing include after an edit" test does not match how the
+real server's diagnostics actually work.</strong> The plan edited in
+<code>INCLUDE('DoesNotExist.inc'),ONCE</code> and expected <code>lsp_diagnostics</code> to report a
+count &gt; 0. Against the real Clarion 12 addin server this always came back
+<code>{ pending: false, count: 0, diagnostics: [] }</code>, confirmed reproducible with a longer (20s)
+wait and with cross-checks using a second, unrelated defect (an undeclared-variable reference), which also
+came back empty. Root cause, found by reading the shipped server source
+(<code>out/server/src/server.js</code> and
+<code>out/server/src/providers/DiagnosticProvider.js</code> /
+<code>out/server/src/providers/diagnostics/MissingIncludeDiagnostics.js</code>):</p>
 <ul>
-<li>Task 9 (real Clarion 12 integration test, README, package finalization) was intentionally not started.
-It requires a Windows machine with Clarion 12 and the Clarion Assistant addin installed, so that
-<code>findClarionRoot()</code> resolves a real <code>C:\Clarion*</code> install with
-<code>accessory\addins\ClarionAssistant\lsp-server\out\server\src\server.js</code>.</li>
-<li>Before running Task 9, add <code>"os": ["win32"]</code> to <code>package.json</code> as the plan's
-conventions section instructs, right before <code>npm pack</code>.</li>
-<li>If <code>npm install</code> on the Task 9 machine hits the same <code>@types/node</code> ERESOLVE
-conflict noted above, it is already resolved on this branch (<code>@types/node@^22.0.0</code>); no further
+<li>The diagnostic named <code>missingIncludes</code> does <strong>not</strong> check whether an
+<code>INCLUDE</code> statement's target file exists on disk. Its own doc-comment: "Detects variables
+declared with a user-defined class type that is not included in the current file or its MEMBER parent"
+&mdash; e.g. <code>st &amp;StringTheory</code> without an <code>INCLUDE('StringTheory.inc')</code>. A
+genuinely-missing include *file* is not a diagnostic category this server emits at all; presumably that
+surfaces only at actual compile/build time, outside the LSP's scope.</li>
+<li>Even if it were the right check, <code>missingIncludes</code> is one of seven <em>async</em>
+validators (<code>server.js</code>'s <code>validatorThunks</code>) that are deferred until two internal
+flags, <code>solutionPipelineReady</code> <em>and</em> <code>sdiPipelineReady</code>, are both true.
+<code>sdiPipelineReady</code> flips only after a background chain kicked off from the
+<code>clarion/updatePaths</code> handler: build the Structure Declaration Index, sleep exactly 2000&nbsp;ms,
+build the FileRelationshipGraph, build the ReferenceCountIndex, then re-validate every open document. This
+chain starts <em>after</em> <code>clarion/solutionReady</code> is sent (the notification this MCP's
+<code>ready: true</code> is based on), so "ready" and "async diagnostics available" are two different
+milestones with no notification exposed for the second one. A document opened between them gets queued in
+the server's own <code>deferredAsyncDocs</code> set and is only revalidated whenever that chain finishes
+&mdash; which our client has no way to await.</li>
+<li><code>undeclaredVar</code> (the other candidate we probed) is separately gated by
+<code>serverSettings.undeclaredVariablesEnabled</code>, which this MCP deliberately never sets (per the
+spec: "omitted, so the server keeps its own defaults") &mdash; and the server's default is off, confirmed
+empirically (an undeclared-variable reference produced no diagnostic either).</li>
+</ul>
+<p><strong>What was verified to actually work</strong>, and what the test now asserts instead: the
+<em>sync</em> validators in <code>DiagnosticProvider.validateDocument</code> (structure terminators, case/
+execute/file structures, etc.) always run immediately, regardless of <code>sdiPipelineReady</code>, because
+they need no cross-file resolution. Editing in an unterminated <code>CASE</code> (no matching
+<code>END</code>) reliably produced, within 3 seconds, on the very first try, every time across three
+consecutive runs:</p>
+<pre>[{
+  "severity": 1,
+  "range": { "start": { "line": 10, "character": 2 }, "end": { "line": 10, "character": 6 } },
+  "message": "CASE statement is not terminated with END or .",
+  "source": "clarion"
+}]</pre>
+<p><code>test/integration.test.ts</code>'s test was renamed to "reports an error for an unterminated
+structure after an edit" and now edits in that <code>CASE</code>/no-<code>END</code> instead, asserting
+both <code>count &gt; 0</code> and the exact message substring above. This is a test-only change: no
+production code (<code>clarion.ts</code>, <code>lsp.ts</code>, <code>tools.ts</code>) needed a fix, because
+<code>lsp_diagnostics</code> was already correctly relaying whatever the server published &mdash; the
+plan's assumption about what the server would publish for that particular edit was simply wrong. Per the
+task instructions, the assertion was changed to match verified real behavior rather than weakened or
+skipped.</p>
+</div>
+
+<div class="entry">
+<span class="tag">Task 9 &mdash; other real-server findings</span>
+<ul>
+<li><code>findClarionRoot()</code> reported this install's Clarion.exe file version as
+<code>12.0.0.14000</code> (four segments) via the PowerShell <code>VersionInfo.FileVersion</code> call,
+which <code>compareVersion</code> handles fine (it pads missing segments with 0 and compares
+element-by-element, not string-wise).</li>
+<li><code>buildPaths()</code>'s ".red beside the .sln, else first .red in bin" heuristic picked
+<code>C:\Clarion12\bin\CLARION120.RED</code> for the fixture (no .red shipped beside
+<code>HelloLsp.sln</code>), and the server accepted it and reached <code>clarion/solutionReady</code>
+successfully &mdash; no evidence of the redirection-file risk the spec flagged. No changes were needed
+to <code>buildPaths</code> or to <code>open_solution</code>'s arguments.</li>
+<li>The real server's raw process <code>stderr</code> carries almost nothing useful: only a single
+startup banner line (<code>"🚀 SERVER: Starting to listen on connection..."</code>) was ever observed on
+the pipe. All of the server's rich <code>logger.info</code>/<code>perfLogger.perf</code> diagnostics
+(startup phases, SDI/FRG build timings, etc.) go somewhere else &mdash; not this process's raw stderr
+stream &mdash; so <code>stderrTail</code> is reliable for surfacing a payload-rejection message (e.g. "No
+projectPaths provided", proven in Tasks 1&ndash;8 against the fake server) but is not a way to observe the
+real server's internal indexing progress. No code changes follow from this; it just means
+<code>lsp_debug_status</code>'s stderr tail will typically be a single startup line during normal, healthy
+operation against the real addin.</li>
+<li><code>lsp_definition</code>, <code>lsp_document_symbols</code>, <code>get_project_source_files</code>,
+and the crash/restart path (<code>lsp_debug_status</code> + <code>process.kill(pid)</code> +
+<code>lsp_hover</code>) all worked against the real server exactly as designed, with no changes needed to
+any Task 1&ndash;8 code.</li>
+</ul>
+</div>
+
+<div class="entry">
+<span class="tag">Task 9</span>
+<p>Ran the <code>simplify</code> skill (single-pass, Agent tool unavailable in this context) over the
+whole branch diff. Two genuine reuse findings in <code>src/tools.ts</code>, both applied: (1)
+<code>open_solution</code> and <code>lsp_start</code> hand-rolled the same try/ok/fail wrapping that the
+<code>guard</code> helper (defined a few lines below them) already exists to do &mdash; moved
+<code>guard</code>'s definition earlier and used it for both, deleting the duplicate try/catch pair; (2)
+<code>positional()</code>, <code>lsp_document_symbols</code>, and <code>lsp_diagnostics</code> each
+repeated the same "<code>checkFile</code> then <code>openDocument</code>" pair &mdash; extracted a
+3-line <code>openChecked(c, file_path)</code> helper and used it in all three. Both are behavior-preserving
+(confirmed by the full suite, unit and integration, staying green afterward). Skipped one candidate finding:
+parallelizing the per-file <code>clarion/findFile</code> lookups inside <code>get_project_source_files</code>
+(currently sequential per unresolved file) &mdash; real solutions could have many redirected files, but
+this is a read-only, once-per-session proxy call, not a hot path, and preserving result order across a
+parallel rewrite adds real risk for a speculative gain; left as sequential.</p>
+</div>
+
+<h2>For the owner</h2>
+<ul>
+<li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task
+9), and pushed on <code>cloud/tasks-1-8</code>.</li>
+<li>The plan's "Manual proof with the IDE closed" step (registering the built server with Claude Code and
+running <code>/lsp-diagnostics</code> from the clarion-assistant plugin on a real solution, IDE closed) was
+explicitly skipped per instruction &mdash; the owner will do that.</li>
+<li>If <code>npm install</code> hits the same <code>@types/node</code> ERESOLVE conflict noted above on
+another machine, it is already resolved on this branch (<code>@types/node@^22.0.0</code>); no further
 action needed there.</li>
-<li>Everything in Tasks 1&ndash;8 was exercised only against the fake server
-(<code>test/fake-server.mjs</code>) and temp directories; the real server's actual JSON-RPC shapes
-(<code>clarion/updatePaths</code>, <code>clarion/getSolutionTree</code>, <code>clarion/getProjectFiles</code>,
-<code>clarion/findFile</code>) are unverified against Clarion 12 itself until Task 9 runs.</li>
+<li>The one real behavioral surprise to know about before relying on <code>lsp_diagnostics</code> against
+a real solution: the async, cross-file diagnostic categories (missing-include-for-a-type, undeclared
+variables when enabled, discarded return values, missing MAP declarations/implementations, interface
+implementation) will not appear for a short window after <code>open_solution</code> reports
+<code>ready: true</code> &mdash; there is no protocol signal for when the server's internal SDI/FRG/RefIndex
+background build finishes, only sync/structural diagnostics (unterminated structures, reserved keywords,
+etc.) are guaranteed available immediately. This is real server behavior, not a bug in this MCP's proxying.</li>
 </ul>
 
 </div>

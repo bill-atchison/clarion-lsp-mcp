@@ -44,6 +44,9 @@ export const fail = (message: string): ToolResult => {
   return { content: [{ type: "text", text: JSON.stringify(body) }], isError: true };
 };
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const guard = (fn: () => Promise<unknown>) => async () => {
+  try { return ok(await fn()); } catch (e) { return fail(msg(e)); }
+};
 
 async function startClient(s: Session): Promise<void> {
   await s.client?.stop();
@@ -116,6 +119,11 @@ function hoverText(h: { contents: unknown } | null): string {
   return Array.isArray(c) ? c.map(one).join("\n") : one(c);
 }
 
+/** Validates the path exists, then opens it on the (already-live) client. */
+function openChecked(c: LspClient, file_path: string) {
+  return c.openDocument(checkFile(file_path));
+}
+
 /**
  * Position request against a file: opens the document first, then sends the request.
  * withClient's "no solution open" check runs before checkFile's "file not found" check (both are
@@ -126,8 +134,7 @@ function hoverText(h: { contents: unknown } | null): string {
 async function positional<T>(s: Session, method: string,
     a: { file_path: string; line: number; character: number }, extra: Record<string, unknown> = {}) {
   return withClient(s, async c => {
-    const file = checkFile(a.file_path);
-    const { uri } = await c.openDocument(file);
+    const { uri } = await openChecked(c, a.file_path);
     return c.request<T>(method, { textDocument: { uri }, position: { line: a.line, character: a.character }, ...extra });
   });
 }
@@ -141,12 +148,12 @@ export function registerTools(server: McpServer, s: Session): void {
       configuration: z.string().optional().describe("Debug (default) or Release"),
       clarion_root: z.string().optional().describe("Clarion install folder; overrides auto-detection"),
     },
-  }, async args => { try { return ok(await openSolution(s, args)); } catch (e) { return fail(msg(e)); } });
+  }, async args => guard(() => openSolution(s, args))());
 
   server.registerTool("lsp_start", {
     description: "Start the Clarion Language Server for the solution in the working directory. " +
       "Same as open_solution with no arguments.",
-  }, async () => { try { return ok(await openSolution(s, {})); } catch (e) { return fail(msg(e)); } });
+  }, async () => guard(() => openSolution(s, {}))());
 
   server.registerTool("get_solution_info", {
     description: "Get the currently open solution, Clarion version, and redirection file.",
@@ -164,10 +171,6 @@ export function registerTools(server: McpServer, s: Session): void {
     openDocuments: s.client?.openDocumentCount ?? 0, diagnosticsCached: s.client?.diagnostics.size ?? 0,
     stderrTail: s.client ? [...s.client.stderrTail] : [],
   }));
-
-  const guard = (fn: () => Promise<unknown>) => async () => {
-    try { return ok(await fn()); } catch (e) { return fail(msg(e)); }
-  };
 
   server.registerTool("lsp_definition", {
     description: "Go to definition: where the symbol at a position is defined (cross-file). Zero-based line/character.",
@@ -190,8 +193,7 @@ export function registerTools(server: McpServer, s: Session): void {
     description: "All symbols in a file: procedures, classes, variables. Flattened with a container name.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
-    const file = checkFile(a.file_path);
-    const { uri } = await c.openDocument(file);
+    const { uri } = await openChecked(c, a.file_path);
     return flatten(asArray(await c.request<DocSymbol[]>("textDocument/documentSymbol", { textDocument: { uri } })));
   }))());
 
@@ -226,8 +228,7 @@ export function registerTools(server: McpServer, s: Session): void {
       "within 3 seconds; treat that as unknown, not clean.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
-    const file = checkFile(a.file_path);
-    const { uri, changed } = await c.openDocument(file);
+    const { uri, changed } = await openChecked(c, a.file_path);
     const list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
     if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
     const diagnostics = list.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
