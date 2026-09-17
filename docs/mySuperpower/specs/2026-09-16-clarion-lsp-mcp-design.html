@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarion LSP MCP</title>
+<style>
+  :root{
+    --paper:#f4efe1; --ink:#221f18; --maroon:#8a2b27; --meta-bg:#e9e1cd;
+    --label:#6d5f4e; --value:#2b2820; --amber:#a8762b;
+    --serif:Georgia,'Times New Roman',serif;
+    --mono:ui-monospace,'Cascadia Mono',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:var(--serif);padding:3.5rem 2rem;}
+  .wrap{max-width:880px;margin:0 auto;}
+
+  main p,main ul,main ol{max-width:84ch;}
+  main pre{max-width:100%;overflow-x:auto;}
+
+  /* ---- FIXED masthead (do not restyle) ---- */
+  .eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.35em;
+           font-size:.8rem;font-weight:700;color:var(--maroon);margin:0 0 1.1rem;}
+  h1{font-family:var(--serif);font-weight:700;font-size:clamp(2.6rem,6vw,4rem);
+     line-height:1.04;letter-spacing:-.01em;margin:0 0 .9rem;}
+  .subtitle{font-family:var(--serif);font-style:italic;font-weight:700;
+            font-size:clamp(1.25rem,2.4vw,1.7rem);line-height:1.3;
+            margin:0 0 1.9rem;max-width:46ch;}
+  .meta-card{display:grid;grid-template-columns:max-content 1fr;column-gap:1.75rem;
+             row-gap:.55rem;align-items:baseline;background:var(--meta-bg);
+             border-radius:14px;border-left:6px solid var(--maroon);padding:1.4rem 1.85rem;}
+  .meta-card dt{font-family:var(--mono);color:var(--label);font-size:.95rem;font-weight:400;}
+  .meta-card dd{font-family:var(--mono);color:var(--value);font-size:.95rem;margin:0;word-break:break-word;}
+  .status-pill{display:inline-block;border:1px solid var(--amber);color:var(--amber);
+               border-radius:999px;padding:.12rem .75rem;font-size:.82rem;letter-spacing:.08em;
+               text-transform:uppercase;line-height:1.45;background:transparent;}
+
+  /* ---- BODY ---- */
+  main{margin-top:3.2rem;font-size:1.06rem;line-height:1.62;}
+  main h2{font-size:1.75rem;line-height:1.15;font-weight:700;letter-spacing:-.01em;
+          margin:3rem 0 1rem;padding-bottom:.4rem;border-bottom:2px solid var(--maroon);}
+  main h3{font-size:1.2rem;font-weight:700;margin:1.9rem 0 .5rem;}
+  main p{margin:0 0 1rem;}
+  main ul,main ol{margin:0 0 1.1rem;padding-left:1.4rem;}
+  main li{margin-bottom:.35rem;}
+  main li::marker{color:var(--maroon);}
+  main code{font-family:var(--mono);font-size:.88em;background:var(--meta-bg);
+            padding:.08em .35em;border-radius:4px;}
+  main pre{background:var(--meta-bg);border-left:4px solid var(--amber);border-radius:0 10px 10px 0;
+           padding:1rem 1.25rem;margin:0 0 1.3rem;font-family:var(--mono);font-size:.86rem;line-height:1.5;}
+  main pre code{background:none;padding:0;font-size:inherit;}
+  main table{width:100%;border-collapse:collapse;margin:0 0 1.4rem;font-size:.97rem;}
+  main th{text-align:left;font-weight:700;padding:.5rem .7rem;border-bottom:2px solid var(--maroon);}
+  main td{padding:.5rem .7rem;border-bottom:1px solid #d5cbb3;vertical-align:top;}
+  main tr:last-child td{border-bottom:none;}
+  main td code,main th code{white-space:nowrap;}
+  .decision{background:var(--meta-bg);border-left:6px solid var(--maroon);border-radius:0 14px 14px 0;
+            padding:1rem 1.4rem;margin:0 0 1.4rem;}
+  .decision p{margin:0;}
+  .decision p+p{margin-top:.5rem;}
+  .rejected{color:var(--label);}
+  figure{margin:1.4rem 0 1.8rem;}
+  figure svg{width:100%;height:auto;display:block;}
+  figcaption{font-style:italic;color:var(--label);font-size:.95rem;margin-top:.5rem;}
+  .check td:first-child{white-space:nowrap;font-family:var(--mono);font-size:.9rem;color:var(--maroon);}
+  @media (max-width:600px){
+    body{padding:2rem 1rem;}
+    .meta-card{grid-template-columns:1fr;row-gap:.2rem;}
+    .meta-card dt{margin-top:.5rem;}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">Spec &middot; Design</p>
+      <h1>Clarion LSP MCP</h1>
+      <p class="subtitle">A stdio MCP server that drives the Clarion Assistant language server so Claude Code, Codex, and Grok can read a Clarion solution with the IDE closed.</p>
+      <dl class="meta-card">
+        <dt>Date</dt><dd>2026-09-16</dd>
+        <dt>Branch</dt><dd>main (empty repo, first commit)</dd>
+        <dt>Status</dt><dd><span class="status-pill">Design &mdash; Awaiting Plan + Impl</span></dd>
+        <dt>Source</dt><dd>Brainstorm: expose the addin-bundled LSP to agents outside the IDE, distributable to other machines and people.</dd>
+      </dl>
+    </header>
+
+    <main>
+
+<h2>Overview</h2>
+<p>The Clarion Assistant IDE addin ships a full Clarion language server: a Node application at
+<code>&lt;ClarionRoot&gt;\accessory\addins\ClarionAssistant\lsp-server\</code> with its own <code>node.exe</code> and
+entrypoint <code>out\server\src\server.js</code>. Today only the running IDE can use it. The addin starts the
+server, sends it the solution's paths, and exposes eleven MCP tools to Claude Code that the
+<code>clarion-assistant</code> plugin skills already depend on.</p>
+<p>This project is a standalone MCP server, <code>clarion-lsp-mcp</code>, that does what the addin does for the
+language server, without the IDE. It finds the Clarion install, starts the bundled server, tells it
+which solution to index, and exposes the same eleven tools plus one to open a solution. Any MCP
+host that can launch a command works: Claude Code, Codex, Grok, or anything else.</p>
+
+<h3>Goals</h3>
+<ul>
+  <li>Same tool names and result shapes as the IDE's MCP, so existing skills such as <code>/lsp-diagnostics</code> run unchanged with the IDE closed.</li>
+  <li>Install on another machine with one npm command and one JSON snippet per host.</li>
+  <li>No redistribution of the language server. The MCP locates an existing Clarion install that has the addin.</li>
+</ul>
+
+<h3>Non-goals</h3>
+<ul>
+  <li>Bundling the server or <code>node.exe</code>. Needs a Clarion install with the Clarion Assistant addin.</li>
+  <li>Mutating project structure. No <code>addSourceFile</code>, no <code>addModuleWithProcedure</code>, no applying renames. Agents already have file tools, and the IDE owns project files.</li>
+  <li>Building, generating, or anything touching <code>.app</code> files. This is read-only code intelligence.</li>
+  <li>Non-Windows hosts. Clarion is Windows only.</li>
+</ul>
+
+<h2>Chosen Approach</h2>
+<div class="decision">
+  <p><strong>Thin proxy.</strong> Spawn the bundled server as a child process, speak JSON-RPC over stdio with
+  <code>vscode-jsonrpc</code>, and translate each MCP tool into one LSP request. One server per MCP process, started
+  lazily on the first <code>open_solution</code>.</p>
+  <p class="rejected">Rejected: <code>vscode-languageclient</code> (built for the VS Code host, far more surface than needed)
+  and hand-rolled JSON-RPC framing (re-implements header parsing and request correlation that <code>vscode-jsonrpc</code> already does).</p>
+</div>
+
+<p>Decisions made during brainstorming, recorded so the plan does not reopen them:</p>
+<table>
+  <tr><th>Question</th><th>Decision</th></tr>
+  <tr><td>Where do the server binaries come from?</td><td>Locate an existing Clarion install. <code>CLARION_ROOT</code> env var overrides auto-detection.</td></tr>
+  <tr><td>How does the MCP learn the solution?</td><td><code>open_solution</code> tool with optional path. No path: search the working directory for exactly one <code>.sln</code>.</td></tr>
+  <tr><td>Tool surface for v1</td><td>The IDE's eleven tools, same names and shapes, plus <code>open_solution</code>. Custom <code>clarion/*</code> plumbing is generic so extras are a few lines each.</td></tr>
+  <tr><td>Distribution</td><td>Public npm package, run with <code>npx clarion-lsp-mcp</code>. Requires Node 20 or newer on the host.</td></tr>
+</table>
+
+<h2>Architecture</h2>
+<figure>
+<svg viewBox="0 0 880 250" role="img" aria-label="Agent host talks MCP over stdio to clarion-lsp-mcp, which talks LSP over stdio to the bundled server, which reads the Clarion install and the solution on disk.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a2b27"/>
+    </marker>
+  </defs>
+  <g font-family="Georgia,serif" font-size="17" fill="#221f18">
+    <rect x="10" y="60" width="200" height="90" rx="12" fill="#e9e1cd" stroke="#8a2b27" stroke-width="2"/>
+    <text x="110" y="97" text-anchor="middle" font-weight="700">Agent host</text>
+    <text x="110" y="124" text-anchor="middle" font-size="14" fill="#6d5f4e">Claude Code, Codex, Grok</text>
+
+    <rect x="340" y="60" width="200" height="90" rx="12" fill="#e9e1cd" stroke="#8a2b27" stroke-width="2"/>
+    <text x="440" y="97" text-anchor="middle" font-weight="700">clarion-lsp-mcp</text>
+    <text x="440" y="124" text-anchor="middle" font-size="14" fill="#6d5f4e">npx, Node 20+</text>
+
+    <rect x="670" y="60" width="200" height="90" rx="12" fill="#e9e1cd" stroke="#8a2b27" stroke-width="2"/>
+    <text x="770" y="97" text-anchor="middle" font-weight="700">Language server</text>
+    <text x="770" y="124" text-anchor="middle" font-size="14" fill="#6d5f4e">bundled node.exe + server.js</text>
+
+    <line x1="212" y1="105" x2="338" y2="105" stroke="#8a2b27" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="275" y="92" text-anchor="middle" font-size="13" font-family="Consolas,monospace">MCP / stdio</text>
+    <line x1="542" y1="105" x2="668" y2="105" stroke="#8a2b27" stroke-width="2" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="605" y="92" text-anchor="middle" font-size="13" font-family="Consolas,monospace">LSP / stdio</text>
+
+    <rect x="560" y="190" width="150" height="46" rx="8" fill="none" stroke="#a8762b" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="635" y="219" text-anchor="middle" font-size="14">C:\Clarion12\</text>
+    <rect x="730" y="190" width="140" height="46" rx="8" fill="none" stroke="#a8762b" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="800" y="219" text-anchor="middle" font-size="14">Solution.sln</text>
+    <line x1="740" y1="152" x2="660" y2="188" stroke="#a8762b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="790" y1="152" x2="800" y2="188" stroke="#a8762b" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="440" y1="152" x2="440" y2="213" stroke="#a8762b" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <line x1="440" y1="213" x2="558" y2="213" stroke="#a8762b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    <text x="445" y="200" font-size="13" fill="#6d5f4e">finds root, spawns</text>
+  </g>
+</svg>
+<figcaption>Two stdio pipes. The MCP never parses Clarion source; it computes paths and forwards requests.</figcaption>
+</figure>
+
+<p>Runtime: TypeScript, ESM, Node 20+. Dependencies: <code>@modelcontextprotocol/sdk</code>, <code>vscode-jsonrpc</code>,
+<code>zod</code> (tool input schemas, already a peer of the SDK). Dev: <code>typescript</code>, <code>vitest</code>, <code>tsx</code>.</p>
+
+<pre><code>clarion-lsp-mcp/
+  package.json            name, bin: { "clarion-lsp-mcp": "dist/index.js" }
+  src/
+    index.ts              MCP server, stdio transport, registers tools from tools.ts
+    clarion.ts            findClarionRoot(), findSolution(), buildPaths()
+    lsp.ts                LspClient: spawn, JSON-RPC, didOpen, diagnostics cache, restart
+    tools.ts              the twelve tool handlers
+  test/
+    clarion.test.ts       root detection and payload against a fake directory tree
+    integration.test.ts   real Clarion 12 + fixture solution; skips without Clarion
+    fixtures/HelloLsp/    tiny hand-written .sln, .cwproj, main.clw, a .red
+  README.md               install and per-host config snippets</code></pre>
+
+<h2>Components</h2>
+
+<h3>clarion.ts: finding Clarion and the solution</h3>
+<p><code>findClarionRoot(override?)</code> returns the first of:</p>
+<ol>
+  <li><code>CLARION_ROOT</code> env var, or the <code>clarion_root</code> tool argument, if set. Fails loudly if it lacks the server.</li>
+  <li>Every <code>C:\Clarion*</code> directory that contains both <code>bin\Clarion.exe</code> and
+  <code>accessory\addins\ClarionAssistant\lsp-server\out\server\src\server.js</code>, sorted by the file version of
+  <code>Clarion.exe</code> descending. Highest wins.</li>
+</ol>
+<p>Version comes from <code>Clarion.exe</code>'s file version via one PowerShell call
+(<code>(Get-Item ...).VersionInfo.FileVersion</code>). No registry lookups: the addin folder is the only thing that
+proves the server exists.</p>
+
+<p><code>findSolution(explicit?, cwd)</code>: an explicit path must exist and end in <code>.sln</code>. Otherwise glob
+<code>*.sln</code> in <code>cwd</code> only (no recursion). Exactly one match is used; zero or many is an error whose message
+lists the candidates. Note that hosts differ in what <code>cwd</code> the MCP process receives, so the README tells users
+to pass a path when in doubt.</p>
+
+<p><code>buildPaths(root, solution, configuration)</code> produces the <code>clarion/updatePaths</code> payload. The server
+parses <code>.sln</code>, <code>.cwproj</code>, and <code>.red</code> itself, so the MCP only supplies locations:</p>
+<pre><code>{
+  solutionFilePath: "C:\\Work\\App\\App.sln",
+  redirectionFile:  "C:\\Work\\App\\App.red",   // .red beside the .sln if one exists,
+                                                // else the first *.red in &lt;root&gt;\bin
+  redirectionPaths: ["C:\\Clarion12\\bin"],
+  libsrcPaths:      ["C:\\Clarion12\\libsrc\\win", "C:\\Clarion12\\libsrc"],
+  projectPaths:     [],                         // server derives these from the .sln
+  macros:           { ClarionRoot: "C:\\Clarion12", bin: "C:\\Clarion12\\bin",
+                      redname: "App.red" },
+  configuration:    "Debug",
+  clarionVersion:   "12.0.14625",
+  defaultLookupExtensions: [".clw", ".inc", ".equ", ".eq", ".int"]
+}</code></pre>
+<p>The boolean feature flags the server accepts (<code>undeclaredVariablesEnabled</code>, inlay hints, code lens) are
+omitted, so the server keeps its own defaults. Code lens is never requested by the MCP, so its cost is not paid.</p>
+
+<h3>lsp.ts: the client</h3>
+<p><code>LspClient</code> owns one child process and one <code>vscode-jsonrpc</code> <code>MessageConnection</code>.</p>
+<ul>
+  <li><code>start(root)</code>: spawn <code>&lt;root&gt;\...\lsp-server\node.exe out\server\src\server.js --stdio</code> with
+  <code>cwd</code> set to the <code>lsp-server</code> folder, so its <code>node_modules</code> resolve. Send <code>initialize</code> with
+  <code>rootUri</code> = solution directory and minimal client capabilities, then <code>initialized</code>.</li>
+  <li><code>openSolution(paths)</code>: send <code>clarion/updatePaths</code>, then await <code>clarion/solutionReady</code>.
+  Resolve early with <code>{ ready: false }</code> after 30 seconds; the server continues indexing and later calls just work.</li>
+  <li><code>openDocument(path)</code>: read the file from disk, send <code>textDocument/didOpen</code> if not already open, or
+  <code>textDocument/didChange</code> with full text if the on-disk content differs from what was last sent. This is how edits
+  made by the agent's own file tools become visible to the server.</li>
+  <li><code>request(method, params)</code> and <code>notify(method, params)</code>: thin pass-throughs. Every custom
+  <code>clarion/*</code> call goes through these, which is the plumbing that makes future extras one-liners.</li>
+  <li><code>diagnostics</code>: a <code>Map&lt;uri, Diagnostic[]&gt;</code> fed by <code>textDocument/publishDiagnostics</code>, plus a
+  <code>waitForDiagnostics(uri, ms)</code> that resolves on the next publish for that uri or times out.</li>
+  <li><code>stderr</code> ring buffer of the last 50 lines, and counters of notifications received, for <code>lsp_debug_status</code>.</li>
+  <li><code>stop()</code>: send <code>shutdown</code>, <code>exit</code>, then kill after 2 seconds if still alive. Called on MCP
+  transport close and on <code>SIGINT</code>.</li>
+</ul>
+
+<h3>tools.ts: the tool surface</h3>
+<p>Line and character are zero-based, as in the IDE's tools. File paths are absolute Windows paths; the MCP converts to
+<code>file:///</code> URIs and back so agents never see URIs.</p>
+<table>
+  <tr><th>Tool</th><th>Input</th><th>Backed by</th><th>Returns</th></tr>
+  <tr><td><code>open_solution</code></td><td><code>solution_path?</code>, <code>configuration?</code>, <code>clarion_root?</code></td><td>start + updatePaths</td><td><code>{ solution, clarionRoot, clarionVersion, redirectionFile, ready }</code></td></tr>
+  <tr><td><code>lsp_start</code></td><td>none</td><td><code>open_solution</code> with defaults</td><td>same as above; kept for skill compatibility</td></tr>
+  <tr><td><code>get_solution_info</code></td><td>none</td><td>cached state</td><td><code>{ solution, clarionVersion, redirectionFile, ready }</code> or <code>{ solution: null }</code></td></tr>
+  <tr><td><code>get_project_source_files</code></td><td>none</td><td><code>clarion/getProjectFiles</code></td><td><code>[{ project, files: [absolutePath] }]</code></td></tr>
+  <tr><td><code>lsp_definition</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/definition</code></td><td><code>[{ file_path, line, character }]</code></td></tr>
+  <tr><td><code>lsp_references</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/references</code></td><td><code>[{ file_path, line, character }]</code></td></tr>
+  <tr><td><code>lsp_hover</code></td><td><code>file_path, line, character</code></td><td><code>textDocument/hover</code></td><td><code>{ contents: string }</code></td></tr>
+  <tr><td><code>lsp_document_symbols</code></td><td><code>file_path</code></td><td><code>textDocument/documentSymbol</code></td><td>flattened <code>[{ name, kind, line, character, container }]</code></td></tr>
+  <tr><td><code>lsp_find_symbol</code></td><td><code>query</code></td><td><code>workspace/symbol</code></td><td><code>[{ name, kind, file_path, line }]</code></td></tr>
+  <tr><td><code>lsp_diagnostics</code></td><td><code>file_path</code></td><td>didOpen + wait 3 s</td><td><code>{ pending, count, diagnostics: [{ severity, line, character, message }] }</code></td></tr>
+  <tr><td><code>lsp_rename</code></td><td><code>file_path, line, character, new_name</code></td><td><code>textDocument/rename</code></td><td><code>{ edits: [{ file_path, line, character, endLine, endCharacter, newText }] }</code> or <code>{ error }</code>. Never applied.</td></tr>
+  <tr><td><code>lsp_debug_status</code></td><td>none</td><td>client state</td><td><code>{ running, pid, solution, notifications, openDocuments, diagnosticsCached, stderrTail }</code></td></tr>
+</table>
+<p>Every position tool calls <code>openDocument</code> first. <code>lsp_diagnostics</code> treats a timeout as
+<code>pending: true</code>, never as clean, matching the IDE contract the skills rely on.</p>
+
+<h3>index.ts: the MCP server</h3>
+<p><code>McpServer</code> from the SDK over <code>StdioServerTransport</code>. Registers the twelve tools with zod schemas and
+one-line descriptions copied from the IDE reference so agents pick them the same way. The server instructions string tells
+the agent to call <code>open_solution</code> first and that lines are zero-based. Nothing else: no resources, no prompts.</p>
+
+<h2>Data Flow</h2>
+<p>Startup, the only real sequence in the system:</p>
+<ol>
+  <li>Host launches <code>npx clarion-lsp-mcp</code>. The MCP registers tools and waits. No child process yet.</li>
+  <li>Agent calls <code>open_solution</code> (or a skill calls <code>lsp_start</code>). The MCP resolves the Clarion root and the
+  <code>.sln</code>, builds the payload, spawns the server, and sends <code>initialize</code>, <code>initialized</code>,
+  <code>clarion/updatePaths</code>.</li>
+  <li>The server parses the <code>.sln</code>, <code>.cwproj</code> files, and the <code>.red</code>, indexes sources, and emits
+  <code>clarion/solutionReady</code>. The MCP returns <code>ready: true</code>, or <code>ready: false</code> after 30 seconds.</li>
+  <li>Agent calls <code>lsp_diagnostics</code> on a file. The MCP reads the file, sends <code>didOpen</code>, waits for
+  <code>publishDiagnostics</code> on that uri up to 3 seconds, and returns the cached list.</li>
+  <li>Agent edits the file with its own tools and calls <code>lsp_diagnostics</code> again. The MCP sees the disk content changed,
+  sends <code>didChange</code> with full text, waits, returns fresh diagnostics.</li>
+</ol>
+<p>Calling <code>open_solution</code> again with a different solution stops the server and starts over. Same solution:
+re-sends <code>updatePaths</code> only.</p>
+
+<h2>Error Handling</h2>
+<table>
+  <tr><th>Situation</th><th>Behaviour</th></tr>
+  <tr><td>No Clarion install found</td><td><code>open_solution</code> returns an error naming the folders searched and how to set <code>CLARION_ROOT</code>.</td></tr>
+  <tr><td>Install found but no addin server</td><td>Error says the Clarion Assistant addin is required and where it was expected.</td></tr>
+  <tr><td>Zero or several <code>.sln</code> in cwd</td><td>Error lists what was found and asks for <code>solution_path</code>.</td></tr>
+  <tr><td>Any tool before <code>open_solution</code></td><td>Returns <code>{ error: "No solution open. Call open_solution first." }</code>. No implicit start, so the agent learns the contract.</td></tr>
+  <tr><td>File path outside the solution or missing</td><td>Position tools return an error; nothing is sent to the server.</td></tr>
+  <tr><td>Server exits or crashes</td><td>Client marks itself dead and keeps the stderr tail. The next tool call restarts the server, re-sends <code>updatePaths</code>, re-opens the requested document, and retries once. A second failure is returned to the agent with the stderr tail.</td></tr>
+  <tr><td>Request hangs</td><td>Every LSP request has a 15 second timeout, diagnostics 3 seconds, solution ready 30 seconds. Timeouts are reported as such, never as empty results.</td></tr>
+  <tr><td>Host closes the transport</td><td><code>stop()</code> runs; the child never outlives the MCP.</td></tr>
+</table>
+<p>All tool errors are returned as MCP tool results with <code>isError: true</code> and a plain message, not thrown, so
+every host renders them the same way.</p>
+
+<h2>Testing</h2>
+<table class="check">
+  <tr><th>Check</th><th>What it proves</th></tr>
+  <tr><td>clarion.test.ts</td><td>Root detection picks the highest version, honours <code>CLARION_ROOT</code>, rejects a root without the addin; <code>findSolution</code> handles zero, one, many; <code>buildPaths</code> chooses the local <code>.red</code> over the bin one. Runs against a temp directory tree, no Clarion needed.</td></tr>
+  <tr><td>integration.test.ts</td><td>Against the real local Clarion 12 and <code>test/fixtures/HelloLsp</code>: <code>open_solution</code> reaches ready, <code>get_project_source_files</code> lists <code>main.clw</code>, <code>lsp_document_symbols</code> returns the fixture's procedure, <code>lsp_diagnostics</code> on a deliberately broken copy reports at least one error, and the crash-restart path recovers after <code>kill</code>. Skips itself with a message when no Clarion root is found.</td></tr>
+  <tr><td>manual</td><td>Register in Claude Code with the IDE closed, run <code>/lsp-diagnostics</code> from the clarion-assistant plugin on a real solution, and confirm the skill completes without changes. Repeat the config snippet in Codex to confirm the stdio contract is host-neutral.</td></tr>
+  <tr><td>build</td><td><code>tsc --noEmit</code>, <code>vitest run</code>, and <code>npm pack --dry-run</code> showing only <code>dist/</code>, <code>README.md</code>, <code>LICENSE</code>.</td></tr>
+</table>
+
+<h2>Risks</h2>
+<ul>
+  <li><strong>Server contract drift.</strong> The <code>clarion/updatePaths</code> field names and <code>clarion/getProjectFiles</code> shape are read from the shipped build, not a published API. A future addin release may change them. Mitigation: the integration test pins the local install, and <code>lsp_debug_status</code> exposes the server's stderr so drift is diagnosable.</li>
+  <li><strong>Redirection file choice.</strong> Picking "the <code>.red</code> beside the <code>.sln</code>, else the first in <code>bin</code>" is a guess at what the IDE does. The <code>.cwproj</code> may name a different one. If the integration test shows missing includes, add a <code>redirection_file</code> argument to <code>open_solution</code> rather than growing heuristics.</li>
+  <li><strong>Working directory ambiguity.</strong> Hosts pass different cwd values to MCP processes. Documented; explicit <code>solution_path</code> is the escape hatch.</li>
+  <li><strong>Large solutions.</strong> Indexing a big solution can exceed 30 seconds. The MCP returns <code>ready: false</code> and tools keep working as the index fills, which is the same experience the IDE gives.</li>
+</ul>
+
+<h2>Self-review</h2>
+<ul>
+  <li>No placeholders. Every field in the payload is sourced from the server's <code>updatePaths</code> handler as shipped in Clarion 12.</li>
+  <li>Consistent: the tool table, data flow, and error table agree on when the server starts (only on <code>open_solution</code> or <code>lsp_start</code>) and on the three timeouts.</li>
+  <li>Scope fits one plan: four source files, two test files, one fixture, one README.</li>
+  <li>Ambiguity resolved: "same shapes as the IDE" is pinned by the tool table; where the IDE's exact JSON was not visible, the shape chosen is the one its skills consume.</li>
+</ul>
+
+    </main>
+  </div>
+</body>
+</html>
