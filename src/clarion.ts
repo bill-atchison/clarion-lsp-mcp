@@ -95,7 +95,8 @@ export function findSolution(explicit: string | undefined, cwd: string): string 
 
 export interface UpdatePathsParams {
   solutionFilePath: string;
-  redirectionFile: string;
+  redirectionFile: string;         // bare file name; the server joins it onto each project dir
+  redirectionFilePath: string;     // full path, for reporting only (ignored by the server)
   redirectionPaths: string[];
   libsrcPaths: string[];
   projectPaths: string[];          // [0] MUST be the solution directory
@@ -115,10 +116,14 @@ export function buildPaths(clarion: ClarionRoot, solutionFile: string,
                            configuration = "Debug"): UpdatePathsParams {
   const solutionDir = path.dirname(solutionFile);
   const bin = path.join(clarion.root, "bin");
-  const redirectionFile = firstRed(solutionDir) ?? firstRed(bin) ?? "";
+  const redirectionFilePath = firstRed(solutionDir) ?? firstRed(bin) ?? "";
+  // The server resolves redirectionFile as <projectDir>\<name>, then <redirectionPaths[0]>\<name>.
+  // Passing a full path here made both joins nonsense and silently disabled redirection.
+  const redirectionFile = path.basename(redirectionFilePath);
   return {
     solutionFilePath: solutionFile,
     redirectionFile,
+    redirectionFilePath,
     redirectionPaths: [bin],
     libsrcPaths: [path.join(clarion.root, "libsrc", "win"), path.join(clarion.root, "libsrc")],
     projectPaths: [solutionDir],

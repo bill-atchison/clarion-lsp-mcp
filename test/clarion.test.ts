@@ -89,7 +89,10 @@ describe("buildPaths", () => {
     const p = buildPaths(clarion, sln, "Release");
     expect(p).toEqual({
       solutionFilePath: sln,
-      redirectionFile: path.join(slnDir, "App.red"),
+      // The server joins redirectionFile onto each project dir, then onto redirectionPaths[0]:
+      // it must be the bare file name. The full path is kept separately for reporting.
+      redirectionFile: "App.red",
+      redirectionFilePath: path.join(slnDir, "App.red"),
       redirectionPaths: [path.join(root, "bin")],
       libsrcPaths: [path.join(root, "libsrc", "win"), path.join(root, "libsrc")],
       projectPaths: [slnDir],
@@ -104,9 +107,11 @@ describe("buildPaths", () => {
     const sln = path.join(drive, "App.sln"); writeFileSync(sln, "");
     const clarion = findClarionRoot({ override: root, readVersion });
     expect(buildPaths(clarion, sln).redirectionFile).toBe("");
+    expect(buildPaths(clarion, sln).redirectionFilePath).toBe("");
     writeFileSync(path.join(root, "bin", "ClarionNet40.red"), "");
     const p = buildPaths(clarion, sln);
-    expect(p.redirectionFile).toBe(path.join(root, "bin", "ClarionNet40.red"));
+    expect(p.redirectionFile).toBe("ClarionNet40.red");
+    expect(p.redirectionFilePath).toBe(path.join(root, "bin", "ClarionNet40.red"));
     expect(p.configuration).toBe("Debug");
     expect(p.macros.redname).toBe("ClarionNet40.red");
   });

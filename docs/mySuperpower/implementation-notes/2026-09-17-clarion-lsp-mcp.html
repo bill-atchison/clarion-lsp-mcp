@@ -283,6 +283,27 @@ this is a read-only, once-per-session proxy call, not a hot path, and preserving
 parallel rewrite adds real risk for a speculative gain; left as sequential.</p>
 </div>
 
+<h2>Live-run bug: redirected source files reported as unresolved</h2>
+<div class="entry">
+<span class="tag">2026-09-17 live run</span>
+<p><b>Symptom.</b> On a real 38-project solution (<code>zPOS_Register</code>, 866 source files under a
+redirected <code>_Source</code> folder), <code>get_project_source_files</code> returned every file as
+<code>unresolved</code>. Diagnostics still worked because the agent opened files by absolute path.</p>
+<p><b>Root cause.</b> The server's <code>RedirectionFileParserServer.parseRedFile()</code> treats
+<code>serverSettings.redirectionFile</code> as a bare file name: it tries
+<code>path.join(projectDir, redirectionFile)</code>, then <code>path.join(redirectionPaths[0], redirectionFile)</code>.
+The spec and Task 3 passed a full path, so both joins produced a nonexistent path
+(<code>C:\proj\C:\proj\Clarion110.red</code>), the parser returned zero entries, and every redirected lookup
+(<code>clarion/findFile</code>, <code>getSearchPaths</code>, <code>getClwDirectories</code>) collapsed to the project folder.
+The Task 9 fixture never caught it because its <code>main.clw</code> sat beside the <code>.cwproj</code>.</p>
+<p><b>Fix.</b> <code>buildPaths()</code> now sends <code>redirectionFile</code> as the basename and keeps the full path in a
+new <code>redirectionFilePath</code> field, which the server ignores and the tools use for reporting. The fixture now
+keeps <code>main.clw</code> in <code>_Source</code> behind a <code>HelloLsp.red</code>, so the integration test reproduces the
+failure and proves the fix. Re-probed the real solution afterwards: 38 projects, 866 resolved, 0 unresolved.</p>
+<p><b>Spec correction.</b> The spec's payload example shows a full path for <code>redirectionFile</code>; the server
+contract is a file name resolved per project directory with <code>redirectionPaths[0]</code> as fallback.</p>
+</div>
+
 <h2>For the owner</h2>
 <ul>
 <li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task

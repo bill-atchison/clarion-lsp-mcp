@@ -66,7 +66,7 @@ async function openSolution(s: Session, args: { solution_path?: string; configur
   else await startClient(s);
   return {
     solution, clarionRoot: clarion.root, clarionVersion: clarion.version,
-    redirectionFile: params.redirectionFile, ready: s.ready,
+    redirectionFile: params.redirectionFilePath, ready: s.ready,
     ...(s.ready ? {} : { stderrTail: [...s.client!.stderrTail] }),
   };
 }
@@ -159,7 +159,7 @@ export function registerTools(server: McpServer, s: Session): void {
     description: "Get the currently open solution, Clarion version, and redirection file.",
   }, async () => ok(s.solution
     ? { solution: s.solution, clarionVersion: s.clarion!.version,
-        redirectionFile: s.params!.redirectionFile, ready: s.ready }
+        redirectionFile: s.params!.redirectionFilePath, ready: s.ready }
     : { solution: null }));
 
   server.registerTool("lsp_debug_status", {

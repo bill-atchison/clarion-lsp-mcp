@@ -13,7 +13,9 @@ describe.skipIf(!clarion)("real Clarion language server", () => {
   beforeAll(async () => {
     dir = mkdtempSync(path.join(tmpdir(), "hello-"));
     cpSync(path.resolve("test/fixtures/HelloLsp"), dir, { recursive: true });
-    main = path.join(dir, "main.clw");
+    // main.clw lives in _Source, reached only through HelloLsp.red ([Common] *.clw = .\_Source),
+    // so this exercises the redirection path the way real solutions do.
+    main = path.join(dir, "_Source", "main.clw");
     h = await connect({}, {
       findRoot: () => clarion!,
       spawnSpec: c => ({ command: c.nodeExe, args: [c.serverMain, "--stdio"], cwd: c.serverDir }),

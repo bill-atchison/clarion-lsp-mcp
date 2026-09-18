@@ -10,7 +10,7 @@ const FAKE = path.resolve("test/fake-server.mjs");
 const spec = (env: Record<string, string> = {}) =>
   ({ command: process.execPath, args: [FAKE], cwd: process.cwd(), env });
 const params = (dir: string): UpdatePathsParams => ({
-  solutionFilePath: path.join(dir, "App.sln"), redirectionFile: "", redirectionPaths: [],
+  solutionFilePath: path.join(dir, "App.sln"), redirectionFile: "", redirectionFilePath: "", redirectionPaths: [],
   libsrcPaths: [], projectPaths: [dir], macros: {}, configuration: "Debug",
   clarionVersion: "0.0", defaultLookupExtensions: [".clw"],
 });
