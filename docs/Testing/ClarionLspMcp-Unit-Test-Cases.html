@@ -302,7 +302,7 @@ var CASES = [
 
   { id:"TC-08", section:"nav", priority:"CORE",
     title:"Go to definition across files",
-    pre:"TC-07 completed. In the same .clw, find a line that CALLS a procedure implemented in ANOTHER .clw of the SAME project (both files listed as Compile Include in the same .cwproj). Do not pick a procedure from a different project: the language server does not resolve prefixed labels such as reg:WIN:ShowExits across projects, and returns an empty list for them. Write down the file, the Notepad line number, and the column where the procedure name starts (Notepad shows Ln and Col in the status bar).",
+    pre:"TC-07 completed. In the same .clw, find a line that CALLS a procedure implemented in another .clw, either in the same project or in another project whose prototypes arrive through an INCLUDE(...,'PROTOTYPES') line in the MAP (for example reg:WIN:ShowExits()). Note: the unpatched language server returns an empty list for the INCLUDE case; docs/server-patches/include-prototypes.cjs fixes it (upstream issue msarson/Clarion-Extension#593). If the server under test is unpatched, pick a same-project call. Write down the file, the Notepad line number, and the column where the procedure name starts (Notepad shows Ln and Col in the status bar).",
     steps:[
       "Say to Claude:   Call lsp_definition with file_path \"<file>\", line <Notepad line minus 1>, character <Notepad column minus 1> and show me the raw JSON result.",
       "Write down the file, line and character you just used; TC-09, TC-10, TC-14 and TC-17 reuse them.",

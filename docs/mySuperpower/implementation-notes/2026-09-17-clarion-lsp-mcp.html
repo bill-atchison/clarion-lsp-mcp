@@ -316,6 +316,15 @@ contract is a file name resolved per project directory with <code>redirectionPat
 <code>workspace/symbol "ShowExits"</code> found the prototype in <code>libsrc\regWindow.inc</code> line 51. So the MCP
 plumbing is sound; the server does not connect a prefixed call-site label to a procedure in another project.
 Not an MCP defect; documented in the user guide's troubleshooting table and TC-08 now asks for a same-project call.</p>
+<p><b>Follow-up (2026-09-18).</b> Dug into the server with its own tokenizer run in-process. It is not a cross-project
+limit at all: (1) <code>DocumentStructure.processShorthandProcedures</code> returns early when a file has no MAP, so an
+<code>.inc</code> holding prototypes under <code>SECTION('PROTOTYPES')</code> gets no <code>MapProcedure</code> tokens and the
+MAP include expansion copies them unclassified; (2) <code>pre:fix:name(</code> tokenizes as StructurePrefix, colon, Function,
+so the shorthand label is <code>name</code> while the call-site word keeps its colons; (3) the MEMBER-parent path in
+<code>DefinitionProvider</code> never consults included tokens. A three-file patch (<code>docs/server-patches/</code>) fixes all
+three; verified on a patched copy and then on the installed server: definition from the caller now lands on
+<code>libsrc\regWindow.inc</code> line 51 and hover links through to <code>REG_WIN_SHOWEXITS.CLW</code>. Filed upstream as
+msarson/Clarion-Extension#593 with the diff, after confirming the same code on branch <code>version-1.0.5</code>.</p>
 <p><b>Warm-up.</b> The first <code>workspace/symbol</code> after ready on this 866-file solution exceeded the 15 s
 request timeout; at 59 s it took 2.0 s. Documented as expected behaviour rather than raising the timeout.</p>
 <p><b>Relative paths.</b> The tester passed <code>file_path "_Source\reg_ITEM_GetAction.clw"</code>. <code>checkFile</code>

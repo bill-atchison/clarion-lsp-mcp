@@ -8,6 +8,8 @@ the patch here.
 
 ## include-prototypes
 
+**Upstream issue:** https://github.com/msarson/Clarion-Extension/issues/593 (filed 2026-09-18 against branch `version-1.0.5`, which has the same code). Delete this patch once a release with the fix ships in the addin.
+
 **Problem.** Go-to-definition and hover return nothing for a procedure whose MAP
 prototype arrives through `INCLUDE('x.inc','PROTOTYPES')` inside the parent's MAP,
 for example `reg:WIN:ShowExits()` called from another project. Two causes:
