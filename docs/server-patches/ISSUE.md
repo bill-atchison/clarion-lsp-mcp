@@ -61,3 +61,7 @@ cross-project hover      **reg:WIN:ShowExits** Module Procedure ... regWindow.in
 ```
 
 The patch is applied to the compiled JavaScript; the equivalent TypeScript change is one-to-one. Happy to open a PR against the source if pointed at the right repository.
+
+## Addendum (draft, not yet posted): interaction with workspace symbol search
+
+`ClarionDocumentSymbolProvider` also classifies shorthand prototypes as `MapProcedure` (setting `subType` and `label = value`, i.e. `ShowExits` without its prefix) and it mutates the tokens it is given, which are the shared `TokenCache` entries. `WorkspaceSymbolProvider` runs it on every project file, so after one Ctrl+T the include's prototype token already carries a sub-type when `getMapTokensWithIncludes` sees it. The first version of this patch skipped already-classified tokens; definition and hover for `reg:WIN:ShowExits` therefore worked until the first workspace symbol query and returned nothing afterwards (references were unaffected). The attached diff now re-labels the token regardless of an existing sub-type and skips only structure members (`parent` set). Root fix upstream would be for the symbol provider to keep the prefix chain in `label`, as `processShorthandProcedures` now does, or not to write into shared tokens.

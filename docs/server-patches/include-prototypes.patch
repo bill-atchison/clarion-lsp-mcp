@@ -1,5 +1,5 @@
---- a/out/server/src/utils/ScopeAnalyzer.js
-+++ b/out/server/src/utils/ScopeAnalyzer.js
+--- a/utils/ScopeAnalyzer.js
++++ b/utils/ScopeAnalyzer.js
 @@ -369,6 +369,9 @@
              const result = this.getTokensFromIncludedFileWithPath(includeInfo.filename, document.uri);
              if (result && result.tokens) {
@@ -53,7 +53,7 @@
 +    for (let i = 0; i < tokens.length; i++) {
 +        const t = tokens[i];
 +        if (t.line <= lo || t.line >= hi) continue;
-+        if (t.subType !== undefined || t.parent) continue;
++        if (t.parent) continue;   // PATCH clarion-lsp-mcp#include-prototypes: re-label even if the symbol provider classified it first
 +        if (t.type !== TT.Function && t.type !== TT.Label && t.type !== TT.Variable) continue;
 +        const next = tokens[i + 1];
 +        if (!next || next.value !== '(' || next.line !== t.line) continue;
@@ -71,8 +71,8 @@
 +}
  //# sourceMappingURL=ScopeAnalyzer.js.map
 \ No newline at end of file
---- a/out/server/src/DocumentStructure.js
-+++ b/out/server/src/DocumentStructure.js
+--- a/DocumentStructure.js
++++ b/DocumentStructure.js
 @@ -1648,8 +1648,17 @@
                  token.subType = ClarionTokenizer_1.TokenType.MapProcedure;
                  token.parent = mapToken;
@@ -93,8 +93,8 @@
                  logger.info(`📌 Found MAP shorthand procedure (separate tokens): ${token.value} at line ${token.line}`);
              }
          }
---- a/out/server/src/providers/DefinitionProvider.js
-+++ b/out/server/src/providers/DefinitionProvider.js
+--- a/providers/DefinitionProvider.js
++++ b/providers/DefinitionProvider.js
 @@ -384,6 +384,27 @@
                          logger.info(`✅ Found MAP declaration in MEMBER file for procedure call: ${word}`);
                          return memberResult.location;

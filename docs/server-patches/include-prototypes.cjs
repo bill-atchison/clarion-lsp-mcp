@@ -8,17 +8,23 @@ const MARK = "// PATCH clarion-lsp-mcp#include-prototypes:";
 function patch(file, edits) {
   const p = S + file;
   const raw = fs.readFileSync(p, "utf8");
-  if (raw.includes(MARK)) { console.log(`${file}: already patched, skipping`); return; }
   const crlf = raw.includes("\r\n");
   let t = crlf ? raw.replace(/\r\n/g, "\n") : raw;
-  for (const [anchor, replacement] of edits) {
+  let applied = 0, skipped = 0;
+  // Idempotent per edit: an edit is skipped when its replacement (or its `present` marker, for
+  // an edit that a later edit modifies) is already in the file, so re-running on an install
+  // that carries an older version of this patch adds only the missing edits.
+  for (const [anchor, replacement, present] of edits) {
+    if (t.includes(replacement) || (present && t.includes(present))) { skipped++; continue; }
     const n = t.split(anchor).length - 1;
     if (n !== 1) throw new Error(`${file}: anchor found ${n} times (expected 1):\n${anchor.slice(0, 160)}`);
     t = t.replace(anchor, replacement);
+    applied++;
   }
+  if (applied === 0) { console.log(`${file}: all ${skipped} edits already applied, skipping`); return; }
   if (!fs.existsSync(p + ".orig")) fs.copyFileSync(p, p + ".orig");
   fs.writeFileSync(p, crlf ? t.replace(/\n/g, "\r\n") : t);
-  console.log(`${file}: patched (${edits.length} edits), backup at ${file}.orig`);
+  console.log(`${file}: patched (${applied} new edit(s), ${skipped} already present), backup at ${file}.orig`);
 }
 
 // ---- 1. ScopeAnalyzer: capture INCLUDE section, classify included prototypes as MapProcedure ----
@@ -86,7 +92,19 @@ function classifyIncludedPrototypes(tokens, section) {
         t.subType = TT.MapProcedure;
         t.label = name;
     }
-}`
+}`,
+  "function classifyIncludedPrototypes(tokens, section) {"   // present-marker: edit 4 changes this text
+  ],
+  // (4) ClarionDocumentSymbolProvider also marks shorthand prototypes as MapProcedure, with the
+  //     prefix-less value as label, and it does so on the SHARED cached tokens (a workspace symbol
+  //     scan runs it on every file). Skipping already-classified tokens then left "ShowExits" in
+  //     place of "reg:WIN:ShowExits" and definition/hover went empty after any Ctrl+T. Always
+  //     (re)label; only structure members (parent set) are off limits.
+  [
+`        if (t.subType !== undefined || t.parent) continue;
+        if (t.type !== TT.Function && t.type !== TT.Label && t.type !== TT.Variable) continue;`,
+`        if (t.parent) continue;   ${MARK} re-label even if the symbol provider classified it first
+        if (t.type !== TT.Function && t.type !== TT.Label && t.type !== TT.Variable) continue;`
   ],
 ]);
 

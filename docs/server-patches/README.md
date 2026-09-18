@@ -26,8 +26,17 @@ the colon prefix in the label, and `DefinitionProvider` falls back to the
 include-aware MAP resolver on the MEMBER parent when the plain member-file search
 misses.
 
-Files: `include-prototypes.cjs` (applies it, keeps `.orig` backups, refuses to
-double-apply, preserves CRLF), `include-prototypes.patch` (unified diff for the
+Amendment (2026-09-18, live run TC-11 follow-up): `ClarionDocumentSymbolProvider` also
+marks shorthand prototypes as `MapProcedure`, with the prefix-less value as label, and it
+does so on the shared cached tokens; a workspace symbol scan (Ctrl+T, `lsp_find_symbol`)
+runs it on every file. The classifier used to skip tokens that already had a sub-type, so
+after any such scan the prototype stayed labelled `ShowExits` and definition and hover for
+`reg:WIN:ShowExits` returned nothing until the server restarted. It now re-labels
+regardless (edit 4); the script is idempotent per edit and upgrades an install that
+carries the first three edits.
+
+Files: `include-prototypes.cjs` (applies it, keeps `.orig` backups, idempotent per edit,
+preserves CRLF), `include-prototypes.patch` (unified diff for the
 upstream issue), `verify-include-prototypes.mjs` (probe against a real solution).
 
 ### Verify before applying (runs a patched copy, leaves the install untouched)
