@@ -84,6 +84,13 @@ describe("position tools", () => {
     expect((await h!.call("lsp_debug_status")).data.openDocuments).toBe(before);
   });
 
+  it("resolves a relative file_path against the solution folder, not the process cwd", async () => {
+    const file = await opened();
+    const r = await h!.call("lsp_hover", { file_path: path.basename(file), line: 1, character: 2 });
+    expect(r.isError).toBe(false);
+    expect(r.data).toEqual({ contents: "hover 1:2" });
+  });
+
   it("maps definition, references and hover to paths", async () => {
     const file = await opened();
     expect((await h!.call("lsp_definition", at(file))).data)

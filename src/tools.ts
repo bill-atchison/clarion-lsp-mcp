@@ -88,8 +88,9 @@ export async function withClient<T>(s: Session, fn: (c: LspClient) => Promise<T>
   }
 }
 
-function checkFile(file_path: string): string {
-  const p = path.resolve(file_path);
+function checkFile(s: Session, file_path: string): string {
+  // Relative paths resolve against the solution folder, not the MCP process cwd.
+  const p = path.resolve(path.dirname(s.solution!), file_path);
   if (!existsSync(p)) throw new Error(`File not found: ${p}`);
   return p;
 }
@@ -120,8 +121,8 @@ function hoverText(h: { contents: unknown } | null): string {
 }
 
 /** Validates the path exists, then opens it on the (already-live) client. */
-function openChecked(c: LspClient, file_path: string) {
-  return c.openDocument(checkFile(file_path));
+function openChecked(s: Session, c: LspClient, file_path: string) {
+  return c.openDocument(checkFile(s, file_path));
 }
 
 /**
@@ -134,7 +135,7 @@ function openChecked(c: LspClient, file_path: string) {
 async function positional<T>(s: Session, method: string,
     a: { file_path: string; line: number; character: number }, extra: Record<string, unknown> = {}) {
   return withClient(s, async c => {
-    const { uri } = await openChecked(c, a.file_path);
+    const { uri } = await openChecked(s, c, a.file_path);
     return c.request<T>(method, { textDocument: { uri }, position: { line: a.line, character: a.character }, ...extra });
   });
 }
@@ -193,7 +194,7 @@ export function registerTools(server: McpServer, s: Session): void {
     description: "All symbols in a file: procedures, classes, variables. Flattened with a container name.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
-    const { uri } = await openChecked(c, a.file_path);
+    const { uri } = await openChecked(s, c, a.file_path);
     return flatten(asArray(await c.request<DocSymbol[]>("textDocument/documentSymbol", { textDocument: { uri } })));
   }))());
 
@@ -228,7 +229,7 @@ export function registerTools(server: McpServer, s: Session): void {
       "within 3 seconds; treat that as unknown, not clean.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
-    const { uri, changed } = await openChecked(c, a.file_path);
+    const { uri, changed } = await openChecked(s, c, a.file_path);
     const list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
     if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
     const diagnostics = list.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,

@@ -304,6 +304,26 @@ failure and proves the fix. Re-probed the real solution afterwards: 38 projects,
 contract is a file name resolved per project directory with <code>redirectionPaths[0]</code> as fallback.</p>
 </div>
 
+<h2>Live-run finding: cross-project definitions, and relative paths</h2>
+<div class="entry">
+<span class="tag">2026-09-17 live run</span>
+<p><b>Symptom.</b> TC-08 asked for the definition of <code>reg:WIN:ShowExits()</code> from
+<code>_Source\reg_ITEM_GetAction.clw</code> (project regItem) and got <code>[]</code>. The PROCEDURE lives in
+<code>_Source\regWindow.clw</code> (project regWindow) with its prototype in <code>libsrc\regWindow.inc</code>.</p>
+<p><b>Evidence.</b> Probed through the tools at 6 s, 59 s and 122 s after ready. A same-project cross-file call
+(<code>reg:ITEM:CashOutExists()</code>) resolved every time to <code>_Source\regItem.clw</code> line 64 (4.9 s cold,
+35 ms warm). The cross-project call returned <code>[]</code> and hover returned <code>""</code> every time, while
+<code>workspace/symbol "ShowExits"</code> found the prototype in <code>libsrc\regWindow.inc</code> line 51. So the MCP
+plumbing is sound; the server does not connect a prefixed call-site label to a procedure in another project.
+Not an MCP defect; documented in the user guide's troubleshooting table and TC-08 now asks for a same-project call.</p>
+<p><b>Warm-up.</b> The first <code>workspace/symbol</code> after ready on this 866-file solution exceeded the 15 s
+request timeout; at 59 s it took 2.0 s. Documented as expected behaviour rather than raising the timeout.</p>
+<p><b>Relative paths.</b> The tester passed <code>file_path "_Source\reg_ITEM_GetAction.clw"</code>. <code>checkFile</code>
+resolved it against <code>process.cwd()</code>, which happens to be the solution folder when Claude Code launches the
+server from there, but is the repo folder in tests and undefined in other hosts. Now resolves against the open
+solution's folder; covered by a new tools test (37 tests total).</p>
+</div>
+
 <h2>For the owner</h2>
 <ul>
 <li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task
