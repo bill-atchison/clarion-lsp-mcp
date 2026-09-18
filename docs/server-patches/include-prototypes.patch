@@ -1,0 +1,125 @@
+--- a/out/server/src/utils/ScopeAnalyzer.js
++++ b/out/server/src/utils/ScopeAnalyzer.js
+@@ -369,6 +369,9 @@
+             const result = this.getTokensFromIncludedFileWithPath(includeInfo.filename, document.uri);
+             if (result && result.tokens) {
+                 logger.info(`   ✅ Loaded ${result.tokens.length} tokens from "${includeInfo.filename}"`);
++                // PATCH clarion-lsp-mcp#include-prototypes: An include pulled into a MAP is MAP content, but DocumentStructure never
++                // classifies prototypes in a file that has no MAP of its own. Classify them here.
++                classifyIncludedPrototypes(result.tokens, includeInfo.section);
+                 // Tag each token with source file information
+                 result.tokens.forEach(token => {
+                     token.sourceFile = result.resolvedPath;
+@@ -409,7 +412,13 @@
+                     if (parenToken.value === '(' && filenameToken.type === TokenTypes_1.TokenType.String) {
+                         // Remove quotes from filename
+                         const filename = filenameToken.value.replace(/^'|'$/g, '');
+-                        includes.push({ filename, line: token.line });
++                        // PATCH clarion-lsp-mcp#include-prototypes:
++                        let section;
++                        if (mapTokens[i + 3] && mapTokens[i + 3].value === ',' && mapTokens[i + 4] &&
++                            mapTokens[i + 4].type === TokenTypes_1.TokenType.String) {
++                            section = mapTokens[i + 4].value.replace(/^'|'$/g, '');
++                        }
++                        includes.push({ filename, line: token.line, section });
+                     }
+                 }
+             }
+@@ -563,4 +572,44 @@
+     }
+ }
+ exports.ScopeAnalyzer = ScopeAnalyzer;
++// PATCH clarion-lsp-mcp#include-prototypes:
++// Mark shorthand prototypes ("name(params)" / "pre:fix:name(params)") in an INCLUDEd file as
++// MapProcedure tokens, with the full colon-joined label, so MAP lookups by call-site word match.
++// Only tokens that start their line and sit at structure depth 0 qualify; when the INCLUDE names
++// a SECTION, only tokens inside that section qualify.
++function classifyIncludedPrototypes(tokens, section) {
++    const TT = TokenTypes_1.TokenType;
++    let lo = -1, hi = Infinity;
++    if (section) {
++        const want = section.toUpperCase();
++        for (let i = 0; i < tokens.length; i++) {
++            const t = tokens[i];
++            if (t.type === TT.Directive && t.value.toUpperCase() === 'SECTION' &&
++                tokens[i + 2] && tokens[i + 2].type === TT.String) {
++                const name = tokens[i + 2].value.replace(/^['"]|['"]$/g, '').toUpperCase();
++                if (lo === -1) { if (name === want) lo = t.line; }
++                else if (t.line > lo) { hi = t.line; break; }
++            }
++        }
++        if (lo === -1) return;
++    }
++    for (let i = 0; i < tokens.length; i++) {
++        const t = tokens[i];
++        if (t.line <= lo || t.line >= hi) continue;
++        if (t.subType !== undefined || t.parent) continue;
++        if (t.type !== TT.Function && t.type !== TT.Label && t.type !== TT.Variable) continue;
++        const next = tokens[i + 1];
++        if (!next || next.value !== '(' || next.line !== t.line) continue;
++        if (/^(module|map|include|section|omit|compile|equate|itemize|class|group|queue|file|record|like)$/i.test(t.value)) continue;
++        let name = t.value, j = i - 1;
++        while (j >= 1 && tokens[j].line === t.line && tokens[j].value === ':' &&
++               tokens[j - 1].line === t.line && tokens[j - 1].type === TT.StructurePrefix) {
++            name = tokens[j - 1].value + ':' + name;
++            j -= 2;
++        }
++        if (j >= 0 && tokens[j].line === t.line) continue;   // something else precedes it on the line
++        t.subType = TT.MapProcedure;
++        t.label = name;
++    }
++}
+ //# sourceMappingURL=ScopeAnalyzer.js.map
+\ No newline at end of file
+--- a/out/server/src/DocumentStructure.js
++++ b/out/server/src/DocumentStructure.js
+@@ -1648,8 +1648,17 @@
+                 token.subType = ClarionTokenizer_1.TokenType.MapProcedure;
+                 token.parent = mapToken;
+                 this.addChildOnce(mapToken, token);
+-                // Set the token's label to the procedure name
+-                token.label = token.value;
++                // PATCH clarion-lsp-mcp#include-prototypes: "pre:fix:name(" tokenizes as StructurePrefix ':' Function; rejoin the
++                // prefix chain so the label matches the call-site word (which keeps its colons).
++                let fullName = token.value;
++                let j = i - 1;
++                while (j >= 1 && this.tokens[j].line === token.line && this.tokens[j].value === ':' &&
++                       this.tokens[j - 1].line === token.line &&
++                       this.tokens[j - 1].type === ClarionTokenizer_1.TokenType.StructurePrefix) {
++                    fullName = this.tokens[j - 1].value + ':' + fullName;
++                    j -= 2;
++                }
++                token.label = fullName;
+                 logger.info(`📌 Found MAP shorthand procedure (separate tokens): ${token.value} at line ${token.line}`);
+             }
+         }
+--- a/out/server/src/providers/DefinitionProvider.js
++++ b/out/server/src/providers/DefinitionProvider.js
+@@ -384,6 +384,27 @@
+                         logger.info(`✅ Found MAP declaration in MEMBER file for procedure call: ${word}`);
+                         return memberResult.location;
+                     }
++                    // PATCH clarion-lsp-mcp#include-prototypes: findMapDeclarationInMemberFile only scans the parent's own tokens;
++                    // prototypes that arrive via INCLUDE inside the parent MAP live in included tokens.
++                    // Fall back to the include-aware MAP resolver on the parent document (as hover does).
++                    try {
++                        const fsMod = require('fs');
++                        const { TextDocument: TD } = require('vscode-languageserver-textdocument');
++                        const UriUtils = require('../utils/UriUtils');
++                        const parentPath = await this.crossFileResolver.resolveFile(memberToken.referencedFile, document.uri);
++                        if (parentPath) {
++                            const parentDoc = TD.create(UriUtils.pathToCanonicalUri(parentPath), 'clarion', 1, fsMod.readFileSync(parentPath, 'utf8'));
++                            const parentTokens = this.tokenCache.getTokens(parentDoc);
++                            const incDecl = this.mapResolver.findMapDeclaration(word, parentTokens, parentDoc, line, localScope === null || localScope === void 0 ? void 0 : localScope.containingProcedure);
++                            if (incDecl) {
++                                logger.info(`✅ Found MAP declaration via INCLUDE in MEMBER file for: ${word}`);
++                                return incDecl;
++                            }
++                        }
++                    }
++                    catch (e) {
++                        logger.warn(`include-aware MAP fallback failed: ${e instanceof Error ? e.message : String(e)}`);
++                    }
+                 }
+                 logger.info(`❌ No MAP declaration found for procedure call: ${word}`);
+             }
