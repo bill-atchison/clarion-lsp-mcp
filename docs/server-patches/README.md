@@ -92,7 +92,38 @@ script is idempotent per edit: re-running it on an install that has an older ver
 of this patch adds only the missing edits.
 Expected: same-project 3 refs (call site, MAP declaration, implementation);
 cross-project about 144 refs across the solution, 35 to 51 s cold and about 1 s warm on
-an 866-file solution. The MCP gives references and symbol search a 120 s budget for that
+an 866-file solution. The MCP gives references and symbol search a 300 s budget for that
 reason (`SLOW_REQUEST_TIMEOUT_MS` in `src/lsp.ts`).
 
 Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCountIndex.js.orig`.
+
+## workspace-symbols
+
+**Upstream issue:** not filed yet; the text is in `ISSUE-workspace-symbols.md`.
+
+**Problem.** Workspace symbol search (`workspace/symbol`, `lsp_find_symbol`, Ctrl+T in the IDE)
+returns entries whose `name` is 100,000+ characters long, and the same symbol twice. On the
+866-file POS solution a query for `reg:` returned 1692 rows of which 190 were such giants,
+an 11 MB reply. Two causes:
+
+1. `ClarionDocumentSymbolProvider` lists a FILE's KEY/INDEX children by upper-casing each
+   token and comparing to `KEY`. A key *labelled* `Key` (`Key  KEY(RSNP:Tx_No,...)`) matches on
+   the label, so `extractParenContent`, which assumes it starts inside the parentheses, starts
+   on the `(` instead, counts depth 2, and runs to the end of the file.
+2. `WorkspaceSymbolProvider` deduplicates by raw URI string, but the token cache's URIs and the
+   project file URIs differ in case (`REG_WIN_SHOWEXITS.CLW` vs `reg_WIN_ShowExits.clw`), so
+   files already scanned from the cache are scanned again from the project list.
+
+**Fix.** Treat a token as the KEY/INDEX keyword only when the next token is `(`, and
+deduplicate by `TokenCache.canonicalKey` (decoded, lower-cased).
+
+Files: `workspace-symbols.cjs`, `workspace-symbols.patch`, `verify-workspace-symbols.mjs`.
+Verify and apply exactly as for include-prototypes, substituting the file names.
+Expected: about 1500 symbols for `reg:`, 0 names over 1000 characters, 0 case-duplicate rows,
+reply under 1 MB; about 60 s cold and 3 s warm on 866 files.
+
+Cold cost is inherent: the scan tokenises every project file the first time (upstream #187
+added cooperative yielding, not caching across scans). On a busy laptop it exceeded 120 s, so
+the MCP gives references and symbol search a 300 s budget (`SLOW_REQUEST_TIMEOUT_MS`).
+
+Revert: restore `providers\ClarionDocumentSymbolProvider.js.orig` and `providers\WorkspaceSymbolProvider.js.orig`.

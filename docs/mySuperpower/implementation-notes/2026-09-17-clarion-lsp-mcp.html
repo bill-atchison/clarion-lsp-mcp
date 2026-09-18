@@ -353,6 +353,23 @@ export, 35 s cold and 0.5 s warm on 866 files. Filed upstream as msarson/Clarion
 re-run on an install carrying the first version of the patch adds only the widening edit.</p>
 </div>
 
+<div class="note">
+<h3>Live run 2026-09-18, TC-11: workspace symbol search (third server patch)</h3>
+<p><b>Symptom.</b> <code>lsp_find_symbol</code> with query <code>reg:</code> timed out at 120 s on the first call. The retry
+returned 1692 rows, 190 of them with names of 100,000+ characters (an 11 MB reply) and several case duplicates.</p>
+<p><b>Causes.</b> (1) <code>ClarionDocumentSymbolProvider</code> lists a FILE's keys by upper-casing each token and comparing
+to <code>KEY</code>; a key <i>labelled</i> <code>Key</code> matches on the label, and <code>extractParenContent</code>, which assumes
+it starts inside the parentheses, starts on the <code>(</code> and runs to end of file. (2) <code>WorkspaceSymbolProvider</code>
+deduplicates by raw URI while cached and project URIs differ in case. (3) In the MCP, <code>LspClient.request</code> left its
+timeout timer live after the answer arrived, which kept probe processes alive for the whole budget and made the scan look
+like a multi-minute hang. (4) The cold scan itself tokenises every project file: 60&ndash;67 s idle on 866 files, more on a
+busy laptop.</p>
+<p><b>Fix.</b> Third server patch, <code>docs/server-patches/workspace-symbols.cjs</code> (keyword only when followed by
+<code>(</code>; dedupe by <code>TokenCache.canonicalKey</code>). <code>src/lsp.ts</code> clears the timer on settle and gives slow
+methods 300 s. Verified on a patched copy and on the install: 1374 symbols, 0 oversized names, 0 duplicates, 0.2 MB, 57 s
+cold and 2 s warm. Upstream issue text drafted in <code>ISSUE-workspace-symbols.md</code>, not yet filed.</p>
+</div>
+
 <h2>For the owner</h2>
 <ul>
 <li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task

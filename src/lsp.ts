@@ -6,7 +6,7 @@ import { createMessageConnection, StreamMessageReader, StreamMessageWriter,
 import type { UpdatePathsParams } from "./clarion.js";
 
 export const REQUEST_TIMEOUT_MS = 15_000;
-export const SLOW_REQUEST_TIMEOUT_MS = 120_000;   // cold solution-wide scan measured at 35-51 s on 866 files
+export const SLOW_REQUEST_TIMEOUT_MS = 300_000;   // cold solution-wide scan measured at 60 s idle, >120 s on a busy laptop (866 files)
 const SLOW_METHODS = new Set(["textDocument/references", "workspace/symbol"]);
 export const DIAGNOSTICS_TIMEOUT_MS = 3_000;
 export const READY_TIMEOUT_MS = 30_000;
@@ -90,10 +90,14 @@ export class LspClient {
     // Solution-wide scans on large solutions can run well past 15 s while the server's
     // indexes are still warm-up cold; give them a longer budget than point lookups.
     const ms = this.opts.requestTimeoutMs ?? (SLOW_METHODS.has(method) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
-    return Promise.race([
-      this.conn.sendRequest(method, params) as Promise<T>,
-      sleep(ms).then(() => { throw new Error(`${method} timed out after ${ms} ms`); }),
-    ]);
+    // Clear the timer once the request settles: a live timer keeps the process alive for the
+    // whole budget (minutes for slow methods) after the answer has already arrived.
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${method} timed out after ${ms} ms`)), ms);
+    });
+    return Promise.race([this.conn.sendRequest(method, params) as Promise<T>, timeout])
+      .finally(() => clearTimeout(timer));
   }
 
   notify(method: string, params?: unknown): Promise<void> {

@@ -1,0 +1,45 @@
+--- a/providers/ClarionDocumentSymbolProvider.js
++++ b/providers/ClarionDocumentSymbolProvider.js
+@@ -960,14 +960,17 @@
+             for (let j = index + 1; j < tokens.length && tokens[j].line <= (finishesAt !== null && finishesAt !== void 0 ? finishesAt : line); j++) {
+                 const childToken = tokens[j];
+                 const childValue = childToken.value.toUpperCase();
++                // PATCH clarion-lsp-mcp#workspace-symbols: a field *labelled* "Key"/"Index" upper-cases to the same word;
++                // only the keyword is followed by "(" and extractParenContent assumes we are inside it.
++                const childOpensParen = j + 1 < tokens.length && tokens[j + 1].value === "(";
+                 // Add KEY as child
+-                if (childValue === "KEY") {
++                if (childValue === "KEY" && childOpensParen) {
+                     const keyContent = this.extractParenContent(tokens, j + 2);
+                     const keySymbol = this.createSymbol(`KEY(${keyContent.content})`, "", vscode_languageserver_types_1.SymbolKind.Key, this.getTokenRange(tokens, childToken.line, childToken.line), this.getTokenRange(tokens, childToken.line, childToken.line), []);
+                     structureSymbol.children.push(keySymbol);
+                 }
+                 // Add INDEX as child
+-                else if (childValue === "INDEX") {
++                else if (childValue === "INDEX" && childOpensParen) {
+                     const indexContent = this.extractParenContent(tokens, j + 2);
+                     const indexSymbol = this.createSymbol(`INDEX(${indexContent.content})`, "", vscode_languageserver_types_1.SymbolKind.Field, this.getTokenRange(tokens, childToken.line, childToken.line), this.getTokenRange(tokens, childToken.line, childToken.line), []);
+                     structureSymbol.children.push(indexSymbol);
+--- a/providers/WorkspaceSymbolProvider.js
++++ b/providers/WorkspaceSymbolProvider.js
+@@ -38,7 +38,7 @@
+         for (const uri of this.tokenCache.getAllCachedUris()) {
+             if (await (0, cooperativeScan_1.cooperativeCheckpoint)(scanned++, token))
+                 return results;
+-            seenUris.add(uri);
++            seenUris.add(TokenCache_1.TokenCache.canonicalKey(uri)); // PATCH clarion-lsp-mcp#workspace-symbols: case-insensitive dedupe
+             const tokens = this.tokenCache.getTokensByUri(uri);
+             if (!tokens)
+                 continue;
+@@ -53,9 +53,9 @@
+                         return results;
+                     const fullPath = path.join(project.path, sourceFile.relativePath);
+                     const uri = (0, UriUtils_1.pathToCanonicalUri)(fullPath); // #251: client-facing Locations + cache key matching VS Code's form
+-                    if (seenUris.has(uri))
++                    if (seenUris.has(TokenCache_1.TokenCache.canonicalKey(uri))) // PATCH clarion-lsp-mcp#workspace-symbols: case-insensitive dedupe
+                         continue;
+-                    seenUris.add(uri);
++                    seenUris.add(TokenCache_1.TokenCache.canonicalKey(uri));
+                     try {
+                         if (!fs.existsSync(fullPath))
+                             continue;

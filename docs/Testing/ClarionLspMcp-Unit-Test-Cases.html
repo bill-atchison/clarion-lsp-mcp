@@ -495,10 +495,47 @@ function timeNow(){
   return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
 }
 
+// RUN_SEED: results of the automated live run recorded by the orchestrating Claude Code session.
+// Loaded when this browser has no saved run, or on demand with the "Load recorded run" button.
+// Full commands and raw outputs: docs/Testing/live-run-2026-09-18.md. Verdicts here are judged
+// against each case's expected text; cases not listed were not part of the automated run.
+var RUN_SEED = {
+  label: "Automated live run 2026-09-18 (TC-08 to TC-19)",
+  header: { tester:"Claude Code orchestrator + clarion-lsp-mcp-testing-worker (automated)", date:"2026-09-18",
+            build:"local build, commit 2221464 + TC-11 fixes", claude:"Claude Code 2.x (Fable 5.1)",
+            clarion:"C:\\Clarion12 12.0.0.14000, addin lsp-server [TGLO-FIX BUILD] + patches include-prototypes, colon-references, workspace-symbols",
+            solution:"C:\\Projects\\GitLab\\POS\\dtpos_412\\zPOS_Register\\POS_Register.sln", ref:"main" },
+  cases: {
+    "TC-08": { verdict:"PASS", notes:"lsp_definition at _Source\\reg_ITEM_GetAction.clw 212:11 (reg:WIN:ShowExits) -> libsrc\\regWindow.inc line 51, the prototype in SECTION('PROTOTYPES').", evidence:"1 entry; server pid 12792" },
+    "TC-09": { verdict:"PASS", notes:"lsp_references at 212:11 -> 144 entries in 111 files, 39 s cold. Scripted cross-check: 144/144 present in findstr (150 lines); the 6 findstr-only lines are comments, string literals and the include prototype line. Substitution: findstr run by the orchestrator from PowerShell.", evidence:"144 refs; findstr 150 lines" },
+    "TC-10": { verdict:"PASS", notes:"lsp_hover at 212:11 -> contents names reg:WIN:ShowExits, Module Procedure, prototype, regWindow.inc:52 -> REG_WIN_SHOWEXITS.CLW:21.", evidence:"contents non-empty" },
+    "TC-11": { verdict:"FAIL", notes:"lsp_find_symbol query \"reg:\": first call {\"error\":\"workspace/symbol timed out after 120000 ms\"}; retry returned 1692 rows incl. reg:WIN:ShowExits and reg:ITEM:GetAction, but 190 rows had names of 100k+ chars (11 MB reply) and 4 rows were case duplicates. Root causes: (1) server FILE-key scan matches a key LABELLED 'Key' and the paren extractor runs to EOF; (2) server dedupes by raw URI, case differs; (3) MCP client left its timeout timer live (kept probe processes alive for the full budget); cold scan is 60-67 s idle and exceeded 120 s on a busy laptop. Fixes: server patch docs/server-patches/workspace-symbols.cjs (applied to install), src/lsp.ts clears the timer and gives slow methods 300 s. Rerun pending.", evidence:"timeout 120000 ms; retry 1692 rows, 190 giant names" },
+    "TC-15": { verdict:"PASS", notes:"Substitution: fresh MCP process started by a scratch script over stdio (no solution opened). lsp_hover C:\\x.clw 0:0 -> isError true, {\"error\":\"No solution open. Call open_solution first.\"}", evidence:"exact expected text" },
+    "TC-18": { verdict:"PASS", notes:"Substitution: scratch script started dist\\index.js with CLARION_ROOT=C:\\NotClarion. open_solution -> isError true, {\"error\":\"C:\\\\NotClarion is not a Clarion install with the Clarion Assistant addin (expected bin\\\\Clarion.exe and accessory\\\\addins\\\\ClarionAssistant\\\\lsp-server\\\\node.exe).\"}. node.exe count before 38, during 39 (the MCP itself), no other new node.exe.", evidence:"no language server spawned" }
+  }
+};
+function seededState(){
+  var s = freshState();
+  if(!RUN_SEED) return s;
+  Object.keys(RUN_SEED.header || {}).forEach(function(k){ if(k in s.header) s.header[k] = RUN_SEED.header[k]; });
+  Object.keys(RUN_SEED.cases || {}).forEach(function(id){
+    var src = RUN_SEED.cases[id], dst = s.cases[id]; if(!dst) return;
+    dst.verdict = src.verdict || ""; dst.notes = src.notes || ""; dst.evidence = src.evidence || "";
+    if(dst.verdict === "PASS") dst.steps = dst.steps.map(function(){ return true; });
+  });
+  return s;
+}
+function loadRecordedRun(){
+  if(!RUN_SEED) return;
+  if(!window.confirm("Replace the current run in this browser with the recorded run \"" + RUN_SEED.label + "\"? Print the PDF first if you need the current results.")) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e){}
+  loadError = false; state = seededState(); state.resumed = false; renderAll(); flushState();
+}
+
 function loadState(){
   var raw = null;
   try { raw = localStorage.getItem(STORAGE_KEY); } catch(e){ storageOK = false; }
-  if(!raw) return freshState();
+  if(!raw) return seededState();
   var s;
   try { s = JSON.parse(raw); }
   catch(e){ loadError = true; return freshState(); }   // unparseable — don't wipe; show notice
@@ -694,6 +731,7 @@ function renderDashboard(){
     '<div class="dashctl">Filter: <select id="filter" onchange="applyFilter(this.value)">'+secOpts+'</select>'+
     '<button onclick="printReport()">Generate PDF Report</button>'+
     '<button onclick="newRun()">New Run / Clear All</button>'+
+    (RUN_SEED ? '<button onclick="loadRecordedRun()" title="'+esc(RUN_SEED.label)+'">Load recorded run</button>' : '')+
     '<button onclick="toggleAll()">Collapse / Expand</button></div></div>';
   recompute();
 }
