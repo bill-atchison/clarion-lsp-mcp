@@ -227,15 +227,17 @@ var SECTIONS = [
 
 // One object per test case. RULE: one source-numbered action = one steps[] entry = one checkbox.
 // priority is "CORE" | "HIGH" | "MED". section must match a SECTIONS key.
+// Every "Say to Claude:" step is the exact text to paste into the Claude Code prompt. Replace the
+// angle-bracket placeholders (<sln path>, <file>, <line>, <character>) with the values you wrote down.
 var CASES = [
   { id:"TC-01", section:"setup", priority:"CORE",
     title:"Confirm the workstation prerequisites",
     pre:"A Windows PC with Clarion 12 (or 11.1) installed and the Clarion Assistant IDE addin present. Node.js installed. A real Clarion solution folder to test with (record its .sln path in the run header).",
     steps:[
       "Close the Clarion IDE. Open Task Manager, Details tab, and confirm there is no Clarion.exe process running.",
-      "Open a command prompt and run: node --version",
+      "Open a command prompt and run:   node --version",
       "In File Explorer, browse to C:\\Clarion12\\accessory\\addins\\ClarionAssistant\\lsp-server (substitute your Clarion folder) and confirm node.exe exists there and the file out\\server\\src\\server.js exists beneath it.",
-      "In the command prompt run: claude --version"
+      "In the command prompt run:   claude --version"
     ],
     expected:"No Clarion.exe process. node --version prints v20 or higher. The lsp-server folder contains node.exe and out\\server\\src\\server.js. claude --version prints a version. If node is missing or older than v20, record BLOCKED and install the current Node LTS before continuing." },
 
@@ -243,9 +245,9 @@ var CASES = [
     title:"Register the server with Claude Code",
     pre:"TC-01 passed. Decide whether you are testing a local build or the published npm package; record which in the run header Build field. The npm form only works after the package has been published: check with   npm view clarion-lsp-mcp version   and if that prints a 404, use the local build.",
     steps:[
-      "For a local build, first run in the repo folder: npm run build   then register from any folder: claude mcp add -s user clarion-lsp -- node C:\\Projects\\GitHub\\clarion-lsp-mcp\\dist\\index.js   (adjust the path). For the published npm package, run instead: claude mcp add -s user clarion-lsp -- cmd /c npx -y clarion-lsp-mcp",
-      "Run: claude mcp list",
-      "Run: claude mcp get clarion-lsp"
+      "For a local build, in the command prompt run:   cd C:\\Projects\\GitHub\\clarion-lsp-mcp && npm run build   (adjust the path), then register from any folder:   claude mcp add -s user clarion-lsp -- node C:\\Projects\\GitHub\\clarion-lsp-mcp\\dist\\index.js   For the published npm package run instead:   claude mcp add -s user clarion-lsp -- cmd /c npx -y clarion-lsp-mcp",
+      "Run:   claude mcp list",
+      "Change directory to the solution folder and run:   claude mcp get clarion-lsp"
     ],
     expected:"claude mcp list shows clarion-lsp. claude mcp get clarion-lsp shows Status: Connected, scope User config, and the command you registered. If it shows failed, disconnected, or CONNECTION_CLOSED, the command could not start: for the npm form that means the package is not published yet (re-register with the local build); for the local build run   node <path>\\dist\\index.js   by hand and paste whatever it prints into Notes, then record FAIL. If claude mcp get shows the right command but a Claude Code session still fails, look for a .mcp.json in the solution folder or any parent folder: a project-scope entry there overrides the user-scope one. Remove or correct it, then restart the session." },
 
@@ -254,8 +256,8 @@ var CASES = [
     pre:"TC-02 passed.",
     steps:[
       "In the command prompt, change directory to the folder that contains the test solution's .sln file.",
-      "Run: claude   (start an interactive session).",
-      "Type: /mcp   and open the clarion-lsp entry."
+      "Run:   claude   (starts an interactive session; every later Say to Claude step is typed here).",
+      "Type:   /mcp   then select the clarion-lsp entry and choose View tools."
     ],
     expected:"The clarion-lsp server shows as connected and lists twelve tools: open_solution, lsp_start, get_solution_info, lsp_debug_status, lsp_definition, lsp_references, lsp_hover, lsp_document_symbols, lsp_find_symbol, lsp_rename, lsp_diagnostics, get_project_source_files. If the server shows as failed, record FAIL and copy the error text shown into Notes." },
 
@@ -263,18 +265,18 @@ var CASES = [
     title:"Open the solution and reach ready",
     pre:"TC-03 passed. You are in the Claude Code session started inside the solution folder. Clarion IDE is closed.",
     steps:[
-      "Type: Open the Clarion solution in this folder using the open_solution tool and show me the raw result.",
+      "Say to Claude:   Call the open_solution tool with solution_path \"<sln path>\" and show me the raw JSON result without summarising it.",
       "When Claude Code asks permission to run the tool, allow it.",
-      "Read the tool result Claude shows. Note the value of ready, clarionRoot, clarionVersion, and redirectionFile."
+      "In the JSON Claude shows, read ready, clarionRoot, clarionVersion and redirectionFile, and write them into the run header."
     ],
-    expected:"The result shows ready: true, solution equal to your .sln path, clarionRoot equal to your Clarion install folder, a clarionVersion such as 12.0.0.14000, and a redirectionFile path ending in .red. There is no stderrTail field. If ready is false, wait one minute and rerun TC-05 before recording; a large solution may still be indexing. If the result is an error mentioning CLARION_ROOT or the Clarion Assistant addin, record FAIL and paste the message into Notes." },
+    expected:"The result shows ready: true, solution equal to your .sln path, clarionRoot equal to your Clarion install folder, a clarionVersion such as 12.0.0.14000, and a redirectionFile path ending in .red (the .red beside the .sln if there is one). There is no stderrTail field. If ready is false, wait one minute and run TC-05 before recording; a large solution may still be indexing. If the result is an error mentioning CLARION_ROOT or the Clarion Assistant addin, record FAIL and paste the message into Notes." },
 
   { id:"TC-05", section:"open", priority:"CORE",
     title:"Status tools report a live server",
     pre:"TC-04 completed.",
     steps:[
-      "Type: Call get_solution_info and show me the raw result.",
-      "Type: Call lsp_debug_status and show me the raw result.",
+      "Say to Claude:   Call get_solution_info and show me the raw JSON result.",
+      "Say to Claude:   Call lsp_debug_status and show me the raw JSON result.",
       "Write down the pid value from lsp_debug_status; TC-17 compares against it."
     ],
     expected:"get_solution_info shows the same solution path and ready value as TC-04. lsp_debug_status shows running: true, a numeric pid, and notifications greater than 0. If running is false, record FAIL and paste stderrTail into Notes." },
@@ -283,37 +285,37 @@ var CASES = [
     title:"Project source files are listed with absolute paths",
     pre:"TC-04 completed. Know the name of at least one .clw file in the solution.",
     steps:[
-      "Type: Call get_project_source_files and show me the raw result.",
-      "Count the projects returned and compare with the projects in the .sln (open the .sln in Notepad; each Project(...) line with a .cwproj is one project).",
-      "Search the result for the .clw file name you know."
+      "Say to Claude:   Call get_project_source_files and tell me: how many projects it returned, the total number of files, the total number of unresolved entries, and the first three file paths of the first project. Do not build the list yourself from disk.",
+      "Open the .sln in Notepad and count the Project(...) lines whose second quoted value ends in .cwproj; compare with the project count Claude reported.",
+      "Say to Claude:   In that get_project_source_files result, is a file named <known .clw name> present? Give me its full path."
     ],
-    expected:"One entry per .cwproj project, each with a files list of absolute paths ending in .clw or .inc, and an unresolved list. The known .clw appears with its full path. unresolved is normally empty; if it is not, check whether each named file exists anywhere under the solution folder. A name that exists on disk but is listed as unresolved is a FAIL; a name that does not exist (for example source not yet generated) is a PASS with the names pasted into Notes." },
+    expected:"The project count matches the .cwproj count from the .sln. Every path Claude quotes is absolute and ends in .clw or .inc. The known .clw is present with its full path, including files that live in a redirected folder such as _Source. The unresolved total is normally 0; if it is not, ask Claude to list the unresolved names and check whether each exists anywhere under the solution folder. A name that exists on disk but is listed as unresolved is a FAIL; a name that does not exist (for example source not yet generated) is a PASS with the names pasted into Notes." },
 
   { id:"TC-07", section:"nav", priority:"CORE",
     title:"Document symbols for a source file",
-    pre:"TC-06 completed. Pick one .clw from the list that contains at least one PROCEDURE; open it in Notepad and note two procedure names.",
+    pre:"TC-06 completed. Pick one .clw from the list that contains at least one PROCEDURE; open it in Notepad and write down two procedure names and the Notepad line number of each.",
     steps:[
-      "Type: Call lsp_document_symbols on <full path of the .clw> and show me the raw result.",
-      "Search the result for the two procedure names you noted."
+      "Say to Claude:   Call lsp_document_symbols with file_path \"<full path of the .clw>\" and show me the raw JSON result.",
+      "Search the result for the two procedure names you wrote down and compare their line values with Notepad."
     ],
-    expected:"Both procedure names appear with a kind number and a zero-based line. The line for each, plus one, matches the line number shown in Notepad's status bar for that procedure. If the list is empty, record FAIL." },
+    expected:"Both procedure names appear with a kind number and a zero-based line. The line for each, plus one, matches the Notepad line number of that procedure. If the list is empty, record FAIL." },
 
   { id:"TC-08", section:"nav", priority:"CORE",
     title:"Go to definition across files",
-    pre:"TC-07 completed. In the same .clw, find a line that CALLS a procedure defined elsewhere in the solution (or in the same file). Note the file, the line number from Notepad, and the column of the procedure name.",
+    pre:"TC-07 completed. In the same .clw, find a line that CALLS a procedure defined elsewhere in the solution (or in the same file). Write down the file, the Notepad line number, and the column where the procedure name starts (Notepad shows Ln and Col in the status bar).",
     steps:[
-      "Type: Call lsp_definition on <full path>, line <Notepad line minus 1>, character <column minus 1> and show me the raw result.",
-      "Write down the file, line and character you used; TC-09, TC-10, TC-14 and TC-17 reuse them.",
+      "Say to Claude:   Call lsp_definition with file_path \"<file>\", line <Notepad line minus 1>, character <Notepad column minus 1> and show me the raw JSON result.",
+      "Write down the file, line and character you just used; TC-09, TC-10, TC-14 and TC-17 reuse them.",
       "Open the file_path the result names in Notepad and go to the result line plus one."
     ],
     expected:"The result is a list with at least one entry, and the file and line it names is where the procedure is declared or implemented. If the list is empty, record FAIL and note the exact line and character you used." },
 
   { id:"TC-09", section:"nav", priority:"HIGH",
     title:"Find references matches a manual search",
-    pre:"TC-08 completed. Use the same procedure name.",
+    pre:"TC-08 completed. Use the same procedure name and the position you wrote down.",
     steps:[
-      "Open a second command prompt in the solution folder (leave Claude Code running in the first) and run: findstr /s /i /n /c:\"<ProcedureName>\" *.clw *.inc   Keep this window open; it lists file:line for every occurrence.",
-      "Type in Claude Code: Call lsp_references at the position from TC-08 and show me the raw result.",
+      "Open a second command prompt in the solution folder (leave Claude Code running in the first) and run:   findstr /s /i /n /c:\"<ProcedureName>\" *.clw *.inc   Keep this window open; it lists file:line for every occurrence.",
+      "Say to Claude:   Call lsp_references with file_path \"<file>\", line <line>, character <character> and show me the raw JSON result.",
       "For each entry in the result, find its file and line plus one in the findstr output."
     ],
     expected:"The result has at least one entry, and every entry's file and line (plus one) appears in the findstr output. If the result is empty while findstr found the name in more than one place, or an entry points at a file and line findstr did not list, record FAIL and paste both outputs into Notes." },
@@ -322,7 +324,7 @@ var CASES = [
     title:"Hover returns a signature",
     pre:"TC-08 completed.",
     steps:[
-      "Type: Call lsp_hover at the position from TC-08 and show me the raw result."
+      "Say to Claude:   Call lsp_hover with file_path \"<file>\", line <line>, character <character> and show me the raw JSON result."
     ],
     expected:"The result has a contents string that is not empty and mentions the procedure name, and usually its prototype. If contents is an empty string, record FAIL." },
 
@@ -330,7 +332,7 @@ var CASES = [
     title:"Workspace symbol search by name",
     pre:"TC-07 completed.",
     steps:[
-      "Type: Call lsp_find_symbol with query <first four letters of the procedure name> and show me the raw result."
+      "Say to Claude:   Call lsp_find_symbol with query \"<first four letters of the procedure name>\" and show me the raw JSON result."
     ],
     expected:"The result lists at least one symbol whose name contains the query, each with file_path and line. The procedure from TC-07 is among them. If the list is empty, record FAIL." },
 
@@ -338,30 +340,31 @@ var CASES = [
     title:"Diagnostics on an unchanged file",
     pre:"TC-07 completed. Use the same .clw.",
     steps:[
-      "Type: Call lsp_diagnostics on <full path of the .clw> and show me the raw result.",
-      "Type the same request a second time."
+      "Say to Claude:   Call lsp_diagnostics with file_path \"<full path of the .clw>\" and show me the raw JSON result.",
+      "Say to Claude:   Call lsp_diagnostics with the same file_path again and show me the raw JSON result.",
+      "Write down the count value."
     ],
-    expected:"Both results show pending: false. The count is the same both times, and diagnostics is a list of that length. If the first result shows pending: true, ask once more; if it is still pending, record FAIL and run lsp_debug_status, pasting stderrTail into Notes." },
+    expected:"Both results show pending: false. The count is the same both times, and diagnostics is a list of that length. If the first result shows pending: true, ask once more; if it is still pending, record FAIL, then say to Claude: Call lsp_debug_status and show me the raw JSON result, and paste stderrTail into Notes." },
 
   { id:"TC-13", section:"diag", priority:"CORE",
     title:"An edit made outside the server is seen and reported",
     pre:"TC-12 completed and its count recorded. The .clw is not open in any editor that will rewrite it.",
     steps:[
-      "Open the .clw in Notepad. Inside the CODE section of the first procedure, add a new line containing exactly:   CASE 1   (three leading spaces) with no matching END, then save.",
-      "Type in Claude Code: Call lsp_diagnostics on the same file and show me the raw result.",
-      "Search the result for the message text: CASE statement is not terminated",
+      "Open the .clw in Notepad. Inside the CODE section of the first procedure, add a new line containing exactly:   CASE 1   (three leading spaces) with no matching END, then save. Write down the Notepad line number of the new line.",
+      "Say to Claude:   Call lsp_diagnostics with file_path \"<full path of the .clw>\" and show me the raw JSON result.",
+      "Search the result for the message text:   CASE statement is not terminated",
       "In Notepad, delete the line you added and save.",
-      "Type in Claude Code: Call lsp_diagnostics on the same file again and show me the raw result."
+      "Say to Claude:   Call lsp_diagnostics with file_path \"<full path of the .clw>\" again and show me the raw JSON result."
     ],
-    expected:"After the edit, count is at least one greater than in TC-12, and one diagnostic has the message CASE statement is not terminated with END or . and a line equal to your inserted line number minus one. After reverting, count returns to the TC-12 value. If the edited count does not rise, record FAIL." },
+    expected:"After the edit, count is at least one greater than in TC-12, and one diagnostic has the message CASE statement is not terminated with END or . and a line equal to your inserted Notepad line number minus one. After reverting, count returns to the TC-12 value. If the edited count does not rise, record FAIL." },
 
   { id:"TC-14", section:"diag", priority:"CORE",
     title:"Rename proposes edits and writes nothing",
-    pre:"TC-08 completed. In the second command prompt from TC-09 run: git status --short   (if the solution is in git) or note the Date modified of the .clw in File Explorer.",
+    pre:"TC-08 completed. In the second command prompt from TC-09 run:   git status --short   (if the solution is in git) or note the Date modified of the .clw in File Explorer.",
     steps:[
-      "Type: Call lsp_rename at the position from TC-08 with new_name <ProcedureName>Renamed and show me the raw result. Do not apply anything.",
+      "Say to Claude:   Call lsp_rename with file_path \"<file>\", line <line>, character <character>, new_name \"<ProcedureName>Renamed\" and show me the raw JSON result. Do not apply any of the edits and do not modify any file.",
       "Count the entries in edits.",
-      "In the second command prompt run git status --short again, or re-check Date modified in File Explorer."
+      "In the second command prompt run   git status --short   again, or re-check Date modified in File Explorer."
     ],
     expected:"The result has an edits list with at least one entry, each with file_path, line, character, endLine, endCharacter, and newText equal to the new name. No file changed: git status is unchanged, or the Date modified is unchanged. If any file changed, record FAIL and restore it from source control." },
 
@@ -369,30 +372,30 @@ var CASES = [
     title:"Tools refuse before a solution is open",
     pre:"TC-02 passed. Start a fresh session so nothing is open.",
     steps:[
-      "Type: /exit   to leave the current Claude Code session, then run: claude   again in the same folder.",
-      "Type: Call lsp_hover on C:\\x.clw line 0 character 0 and show me the raw result."
+      "Type:   /exit   to leave the current Claude Code session, then run:   claude   again in the same folder.",
+      "Say to Claude:   Call lsp_hover with file_path \"C:\\x.clw\", line 0, character 0 and show me the raw result, including any error text."
     ],
     expected:"The tool returns an error result whose text is: No solution open. Call open_solution first. Claude reports it as an error, not a crash. If any other message appears, record FAIL and paste it." },
 
   { id:"TC-16", section:"fail", priority:"MED",
     title:"A missing file is refused without touching the server",
-    pre:"In the fresh session from TC-15, open the solution again (repeat TC-04 step 1).",
+    pre:"In the fresh session from TC-15, open the solution again: say to Claude:   Call open_solution with solution_path \"<sln path>\" and show me the raw JSON result.",
     steps:[
-      "Type: Call lsp_debug_status and note openDocuments.",
-      "Type: Call lsp_diagnostics on <solution folder>\\DoesNotExist.clw and show me the raw result.",
-      "Type: Call lsp_debug_status again and compare openDocuments."
+      "Say to Claude:   Call lsp_debug_status and show me the raw JSON result.   Write down openDocuments.",
+      "Say to Claude:   Call lsp_diagnostics with file_path \"<solution folder>\\DoesNotExist.clw\" and show me the raw result, including any error text.",
+      "Say to Claude:   Call lsp_debug_status again and show me the raw JSON result.   Compare openDocuments."
     ],
     expected:"The diagnostics call returns an error result containing File not found. openDocuments is the same before and after. If openDocuments increased, record FAIL." },
 
   { id:"TC-17", section:"fail", priority:"HIGH",
     title:"The server recovers from a crash",
-    pre:"Solution open (TC-16). Have the pid from TC-05 or a fresh lsp_debug_status.",
+    pre:"Solution open (TC-16).",
     steps:[
-      "Type: Call lsp_debug_status and write down pid.",
+      "Say to Claude:   Call lsp_debug_status and show me the raw JSON result.   Write down pid.",
       "Open Task Manager, Details tab, sort by PID, select the node.exe with that PID, and click End task.",
-      "Type in Claude Code: Call lsp_debug_status and show me the raw result.",
-      "Type: Call lsp_hover at the position from TC-08 and show me the raw result.",
-      "Type: Call lsp_debug_status once more and compare pid."
+      "Say to Claude:   Call lsp_debug_status and show me the raw JSON result.",
+      "Say to Claude:   Call lsp_hover with file_path \"<file>\", line <line>, character <character> and show me the raw JSON result.",
+      "Say to Claude:   Call lsp_debug_status once more and show me the raw JSON result.   Compare pid with the one you wrote down."
     ],
     expected:"After End task, lsp_debug_status shows running: false. The hover call still returns a non-empty contents string, not an error. The final lsp_debug_status shows running: true with a different pid. If the hover call returns an error containing failed again after restart, record FAIL and paste stderrTail into Notes." },
 
@@ -400,11 +403,11 @@ var CASES = [
     title:"A wrong CLARION_ROOT produces a clear error",
     pre:"Not inside a Claude Code session (type /exit first).",
     steps:[
-      "In the command prompt run: set CLARION_ROOT=C:\\NotClarion",
-      "Run: claude   in the solution folder.",
-      "Type: Open the Clarion solution in this folder using open_solution and show me the raw result.",
+      "In the command prompt run:   set CLARION_ROOT=C:\\NotClarion",
+      "Run:   claude   in the solution folder.",
+      "Say to Claude:   Call open_solution with solution_path \"<sln path>\" and show me the raw result, including any error text.",
       "Open Task Manager, Details tab, and confirm no node.exe with a PID you have not seen before has appeared.",
-      "Type: /exit   then in the command prompt run: set CLARION_ROOT=   (clears it for this window)."
+      "Type:   /exit   then in the command prompt run:   set CLARION_ROOT=   (clears it for this window)."
     ],
     expected:"open_solution returns an error result whose text says C:\\NotClarion is not a Clarion install with the Clarion Assistant addin (expected bin\\Clarion.exe and accessory\\addins\\ClarionAssistant\\lsp-server\\node.exe). No new node.exe appears in Task Manager. If the solution opens successfully instead, record FAIL: the override was ignored." },
 
@@ -412,9 +415,9 @@ var CASES = [
     title:"The clarion-assistant /lsp-diagnostics skill runs end to end with the IDE closed",
     pre:"The clarion-assistant Claude Code plugin is installed (its skills appear when you type /). CLARION_ROOT is unset or correct. Clarion IDE is closed.",
     steps:[
-      "Run: claude   in the solution folder.",
-      "Type: Open the Clarion solution in this folder using open_solution.   (The skill checks get_solution_info first and stops if nothing is open.)",
-      "Type: /clarion-assistant:lsp-diagnostics   (or pick lsp-diagnostics from the list that appears when you type /).",
+      "Run:   claude   in the solution folder.",
+      "Say to Claude:   Call open_solution with solution_path \"<sln path>\" and confirm it reports ready: true.   (The skill checks get_solution_info first and stops if nothing is open.)",
+      "Type:   /clarion-assistant:lsp-diagnostics   (or pick lsp-diagnostics from the list that appears when you type /).",
       "Allow each tool call the skill requests.",
       "Read the final summary line."
     ],
@@ -424,9 +427,9 @@ var CASES = [
     title:"Unregister cleanly",
     pre:"All other cases recorded.",
     steps:[
-      "Type: /exit   to leave Claude Code.",
-      "Run: claude mcp remove clarion-lsp",
-      "Run: claude mcp list",
+      "Type:   /exit   to leave Claude Code.",
+      "Run:   claude mcp remove clarion-lsp -s user",
+      "Run:   claude mcp list",
       "Open Task Manager, Details tab, right-click a column header, choose Select columns, tick Command line, and confirm no node.exe whose command line contains lsp-server remains."
     ],
     expected:"claude mcp list no longer shows clarion-lsp, and no leftover language server process is running. The Clarion install folder is unchanged. If a node.exe from lsp-server is still running, record FAIL and end it manually." }
@@ -470,8 +473,14 @@ function renderPreamble(){
     '<p><b>Prerequisites.</b> Windows PC with Clarion 12 or 11.1 and the Clarion Assistant addin installed, Node.js 20 or newer, Claude Code installed and signed in, '+
     'and a real Clarion solution folder you may edit (use a copy or a git checkout so TC-13 and TC-14 are safe to revert). Notepad, File Explorer, Task Manager and a command prompt are the only other tools. '+
     'Record the solution path and the build under test in the run header before starting. TC-19 also needs the clarion-assistant Claude Code plugin.</p>'+
-    '<p><b>How to ask.</b> Every step that says "Type:" is typed into the Claude Code prompt. Asking for "the raw result" makes Claude show the tool\'s JSON so you can read field names such as ready, pending, count and pid. '+
-    'Line and character values given to tools are zero-based: subtract one from what Notepad shows.</p>'+
+    '<p><b>How to ask Claude.</b> Steps that begin <b>Say to Claude:</b> give the exact sentence to paste into the Claude Code prompt; replace the angle-bracket placeholders with the values you wrote down. '+
+    'Asking for "the raw JSON result" makes Claude show the tool\'s JSON so you can read field names such as ready, pending, count and pid instead of a summary. '+
+    'Steps that begin <b>Type:</b> are slash commands typed into the same prompt; steps that begin <b>Run:</b> go in the command prompt. '+
+    'Line and character values given to tools are zero-based: subtract one from the Ln and Col that Notepad shows.</p>'+
+    '<p><b>Tool prompts at a glance.</b> open_solution: "Call open_solution with solution_path \"...\" and show me the raw JSON result." &middot; '+
+    'position tools: "Call lsp_definition | lsp_references | lsp_hover with file_path \"...\", line N, character N and show me the raw JSON result." &middot; '+
+    'file tools: "Call lsp_document_symbols | lsp_diagnostics with file_path \"...\" and show me the raw JSON result." &middot; '+
+    'no-argument tools: "Call get_solution_info | lsp_debug_status | get_project_source_files and show me the raw JSON result."</p>'+
     '<p><b>Known watch-point.</b> On a large solution open_solution may report ready: false after 30 seconds while the server keeps indexing in the background; wait a minute and retry the status call before recording. '+
     'The real server only reports some kinds of problems (an unterminated CASE is reliable; a missing INCLUDE file is not), which is why TC-13 uses CASE.</p></details>';
 }
