@@ -6,6 +6,8 @@ import { createMessageConnection, StreamMessageReader, StreamMessageWriter,
 import type { UpdatePathsParams } from "./clarion.js";
 
 export const REQUEST_TIMEOUT_MS = 15_000;
+export const SLOW_REQUEST_TIMEOUT_MS = 60_000;
+const SLOW_METHODS = new Set(["textDocument/references", "workspace/symbol"]);
 export const DIAGNOSTICS_TIMEOUT_MS = 3_000;
 export const READY_TIMEOUT_MS = 30_000;
 
@@ -85,7 +87,9 @@ export class LspClient {
 
   request<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.conn || !this._running) return Promise.reject(new Error("Language server is not running"));
-    const ms = this.opts.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
+    // Solution-wide scans on large solutions can run well past 15 s while the server's
+    // indexes are still warm-up cold; give them a longer budget than point lookups.
+    const ms = this.opts.requestTimeoutMs ?? (SLOW_METHODS.has(method) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
     return Promise.race([
       this.conn.sendRequest(method, params) as Promise<T>,
       sleep(ms).then(() => { throw new Error(`${method} timed out after ${ms} ms`); }),

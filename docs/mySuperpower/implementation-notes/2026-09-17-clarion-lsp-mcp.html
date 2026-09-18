@@ -333,6 +333,26 @@ server from there, but is the repo folder in tests and undefined in other hosts.
 solution's folder; covered by a new tools test (37 tests total).</p>
 </div>
 
+<h2>Live-run finding: find-references for colon-prefixed labels</h2>
+<div class="entry">
+<span class="tag">2026-09-18 live run, TC-09</span>
+<p><b>Symptom.</b> <code>lsp_references</code> returned <code>[]</code> for <code>reg:WIN:ShowExits</code> and for the same-project
+<code>reg:ITEM:CashOutExists</code>, then after a first patch only 13 of about 145 real call sites.</p>
+<p><b>Root causes, traced with stderr instrumentation in a scratch copy of the server.</b> (1) <code>ReferenceCountIndex</code>
+is built from a word regex that splits identifiers at colons, so <code>mayContain(file, "reg:ITEM:CashOutExists")</code> is
+false for every file and the scan never runs; (2) call sites tokenize as StructurePrefix, colon, Function, and the scan compares
+single token values to the whole word; (3) the symbol finder resolves <code>reg:WIN:ShowExits</code> to a bogus field
+<code>WIN:ShowExits</code> on a FILE with <code>PRE(REG)</code>; (4) the procedure-hunt route searches only the declaring
+project plus the caller's file, so a DLL export's callers in other projects are never scanned.</p>
+<p><b>Fix.</b> Second server patch, <code>docs/server-patches/colon-references.cjs</code>: tail-segment lookup in the index,
+prefix-chain rejoin in the scan, a colon word with a partial field match goes down the hunt route, and a declaration in another
+project widens the search to every project. Verified on a patched copy: 3 refs for the same-project call and 144 for the
+export, 35 s cold and 0.5 s warm on 866 files. Filed upstream as msarson/Clarion-Extension#596.</p>
+<p><b>MCP change.</b> <code>src/lsp.ts</code> now gives <code>textDocument/references</code> and <code>workspace/symbol</code> a
+60 s budget (<code>SLOW_REQUEST_TIMEOUT_MS</code>); point lookups keep 15 s. The apply script is idempotent per edit so a
+re-run on an install carrying the first version of the patch adds only the widening edit.</p>
+</div>
+
 <h2>For the owner</h2>
 <ul>
 <li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task

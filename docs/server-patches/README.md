@@ -76,14 +76,23 @@ every procedure. Three causes:
    partial structure-field match (`WIN:ShowExits` on a FILE with `PRE(REG)`) and takes
    the field route.
 
+4. The procedure-hunt route searches only the declaring project plus the caller's
+   file, so a DLL export called from 30 other projects reports a handful of hits.
+
 **Fix.** `mayContain` also accepts a file when the last colon segment is counted; the
 per-file scan rejoins the prefix chain before comparing; a colon word that only
-partially matched a field is sent down the procedure-hunt route.
+partially matched a field is sent down the procedure-hunt route; and when the
+declaration belongs to a different project than the caller, every project's source
+files are searched (the index prunes files that cannot contain the name).
 
 Files: `colon-references.cjs`, `colon-references.patch`, `verify-colon-references.mjs`
 (`ONLY=same|cross` limits the cases; `SHOW_STDERR=1` prints `[TRACE]` lines if any).
-Verify and apply exactly as for include-prototypes, substituting the file names.
+Verify and apply exactly as for include-prototypes, substituting the file names. The
+script is idempotent per edit: re-running it on an install that has an older version
+of this patch adds only the missing edits.
 Expected: same-project 3 refs (call site, MAP declaration, implementation);
-cross-project 13 refs including `regWindow.clw` line 157.
+cross-project about 144 refs across the solution, 35 s cold and under 1 s warm on an
+866-file solution. The MCP gives references and symbol search a 60 s budget for that
+reason (`SLOW_REQUEST_TIMEOUT_MS` in `src/lsp.ts`).
 
 Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCountIndex.js.orig`.

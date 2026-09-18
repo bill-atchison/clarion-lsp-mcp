@@ -17,7 +17,7 @@ const session = createSession({
 const server = new McpServer({ name: "probe", version: "0" }); registerTools(server, session);
 const [a, b] = InMemoryTransport.createLinkedPair(); await server.connect(a);
 const client = new Client({ name: "probe", version: "0" }); await client.connect(b);
-const call = async (name, args = {}) => JSON.parse((await client.callTool({ name, arguments: args })).content[0].text);
+const call = async (name, args = {}) => JSON.parse((await client.callTool({ name, arguments: args }, undefined, { timeout: 300000 })).content[0].text);
 console.log("open:", (await call("open_solution")).ready);
 await new Promise(r => setTimeout(r, 45000));
 const caller = path.join(dir, "_Source", "reg_ITEM_GetAction.clw");

@@ -45,6 +45,63 @@
                  else {
                      continue;
                  }
+@@ -3097,6 +3126,56 @@
+         if (incDecl && !filesToSearch.includes(incDecl.uri)) {
+             filesToSearch.push(incDecl.uri);
+         }
++        // PATCH clarion-lsp-mcp#colon-references: the prototype include is pulled into other programs' MAPs too; search
++        // every includer and all of its MEMBER files, not just the declaring project.
++        // incDecl is only computed when no declaration was found by label; for a DLL export the
++        // label IS found (the MODULE declaration in the DLL's program), so look the include up here.
++        const incForWiden = incDecl || await this.findProcedureInMapIncludes(word.toLowerCase(), currentPath, procedureSubTypes, new Set(), token);
++        if (incForWiden) {
++            try {
++                const graphW = FileRelationshipGraph_1.FileRelationshipGraph.getInstance();
++                if (graphW.isBuilt) {
++                    const incPath = decodeURIComponent(incForWiden.uri.replace(/^file:\/\/\//i, '')).replace(/\//g, '\\');
++                    const pushPath = (p) => {
++                        const u = fsPathToUri(p.replace(/\//g, '\\'));
++                        if (!filesToSearch.includes(u))
++                            filesToSearch.push(u);
++                    };
++                    for (const includer of graphW.getIncludingFiles(incPath)) {
++                        pushPath(includer);
++                        for (const member of graphW.getMemberFiles(includer))
++                            pushPath(member);
++                    }
++                }
++            }
++            catch (e) {
++                logger.warn(`include-widening failed: ${e instanceof Error ? e.message : String(e)}`);
++            }
++        }
++        // Export case: the declaration belongs to a different project than the caller, so any
++        // project may call it. Search the whole solution; the reference-count index prunes files
++        // that cannot contain the name, so this stays cheap.
++        try {
++            const smW = solutionManager_1.SolutionManager.getInstance();
++            if (smW && smW.solution && smW.solution.projects) {
++                const declBase = path.basename(decodeURIComponent(declarationUri.replace(/^file:\/\/\//i, '')));
++                const declProj = smW.findProjectForFile(declBase);
++                const curProj = smW.findProjectForFile(path.basename(currentPath));
++                if (declProj && curProj && declProj !== curProj) {
++                    for (const project of smW.solution.projects) {
++                        for (const sourceFile of project.sourceFiles) {
++                            const fullPath = path.isAbsolute(sourceFile.relativePath) ? sourceFile.relativePath : path.join(project.path, sourceFile.relativePath);
++                            const u = fsPathToUri(fullPath);
++                            if (!filesToSearch.includes(u))
++                                filesToSearch.push(u);
++                        }
++                    }
++                }
++            }
++        }
++        catch (e) {
++            logger.warn(`export-widening failed: ${e instanceof Error ? e.message : String(e)}`);
++        }
+         // #309: a caller-supplied declaration can live outside the project file list
+         // (e.g. a class declared in a redirection-reachable INC) — make sure its own
+         // file is searched so the declaration site appears in the results.
 --- a/out/server/src/services/ReferenceCountIndex.js
 +++ b/out/server/src/services/ReferenceCountIndex.js
 @@ -177,6 +177,12 @@

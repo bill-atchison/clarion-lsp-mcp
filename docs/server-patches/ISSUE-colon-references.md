@@ -26,17 +26,20 @@ Actual: `[]` for both. Expected: the call sites plus declaration and implementat
 2. **Call sites can never match.** `reg:ITEM:CashOutExists(` tokenizes as `StructurePrefix("reg:ITEM")`, `Delimiter(":")`, `Function("CashOutExists")`. `findReferencesInFile` compares `token.value` to the whole search word, so even when the file is scanned no call-site token matches.
 3. **Include prototypes take the field route.** For `reg:WIN:ShowExits` `SymbolFinderService.findSymbol` never sees the include's prototype and falls through to `findStructureField`, which returns the FILE `REGMST ... PRE(REG)` field `WIN:ShowExits` (a partial match on the `REG` prefix). The provider then searches for a field named `WIN:ShowExits`.
 
+4. **Search scope stops at the declaring project.** Once the declaration is found, `findProcedureReferences` searches the declaring project's files plus the caller's file. `reg:WIN:ShowExits` is a DLL export called from about 30 projects, so 13 of roughly 145 call sites are reported.
+
 ## Fix (attached diff against `out/server/src`)
 
 - `ReferenceCountIndex.mayContain`: when the name contains `:`, also accept the file if the last colon segment has a count.
 - `ReferencesProvider.findReferencesInFile`: new branch for search words containing `:`; rejoin the `StructurePrefix ':'` chain preceding a `Function`/`Label`/`Variable` token on the same line and compare the joined label, reporting the whole label range.
 - `ReferencesProvider.provideReferencesUnfiltered`: if a colon word resolved to a `field` whose token value is not the whole word, discard it and take the procedure-hunt route.
+- `ReferencesProvider.findProcedureReferences`: when the declaration's project differs from the caller's, add every project's source files to the search list. `ReferenceCountIndex.mayContain` prunes files that cannot contain the name, so on the 866-file solution the widened scan costs about 35 s cold and under 1 s warm.
 
 ## Result with the patch
 
 ```
 reg:ITEM:CashOutExists @138:32 -> 3 refs: reg_ITEM_GetAction.clw 139, regItem.clw 65, reg_ITEM_CashOutExists.clw 21
-reg:WIN:ShowExits      @212:20 -> 13 refs incl. reg_ITEM_GetAction.clw 202 and 213, regWindow.clw 157, reg_WIN_AcceptEntry.clw 1387
+reg:WIN:ShowExits      @212:20 -> 144 refs across the solution (findstr: 150 lines, of which 5 are comments or string literals)
 ```
 
 The TypeScript equivalent is one-to-one; happy to open a PR.
