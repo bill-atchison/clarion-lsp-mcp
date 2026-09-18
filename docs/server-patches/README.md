@@ -91,8 +91,8 @@ Verify and apply exactly as for include-prototypes, substituting the file names.
 script is idempotent per edit: re-running it on an install that has an older version
 of this patch adds only the missing edits.
 Expected: same-project 3 refs (call site, MAP declaration, implementation);
-cross-project about 144 refs across the solution, 35 s cold and under 1 s warm on an
-866-file solution. The MCP gives references and symbol search a 60 s budget for that
+cross-project about 144 refs across the solution, 35 to 51 s cold and about 1 s warm on
+an 866-file solution. The MCP gives references and symbol search a 120 s budget for that
 reason (`SLOW_REQUEST_TIMEOUT_MS` in `src/lsp.ts`).
 
 Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCountIndex.js.orig`.
