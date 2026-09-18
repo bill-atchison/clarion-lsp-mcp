@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { findClarionRoot, findSolution, buildPaths,
          type ClarionRoot, type UpdatePathsParams } from "./clarion.js";
-import { LspClient, toUri, fromUri, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
+import { LspClient, toUri, fromUri, DIAGNOSTICS_SETTLE_MS, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
 
 export interface SessionOptions {
   cwd: string;
@@ -226,12 +226,20 @@ export function registerTools(server: McpServer, s: Session): void {
 
   server.registerTool("lsp_diagnostics", {
     description: "Current errors and warnings for a file. pending:true means the server has not answered " +
-      "within 3 seconds; treat that as unknown, not clean.",
+      "within 3 seconds; treat that as unknown, not clean. After a file changes, the answer waits for the " +
+      "server's second (complete) publish, which can take several seconds.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
     const { uri, changed } = await openChecked(s, c, a.file_path);
-    const list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
+    let list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
     if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
+    if (changed) {
+      // The first publish after a change is the structural pass only; the semantic warnings
+      // arrive in a second publish a few seconds later. Reporting the first as final made a
+      // freshly edited file look clean. Wait for the second, bounded, and take the latest.
+      const settle = s.opts.clientOpts?.diagnosticsSettleMs ?? DIAGNOSTICS_SETTLE_MS;
+      list = (await c.waitForDiagnostics(uri, settle)) ?? c.diagnostics.get(uri) ?? list;
+    }
     const diagnostics = list.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
       character: d.range.start.character, message: d.message }));
     return { pending: false, count: diagnostics.length, diagnostics };

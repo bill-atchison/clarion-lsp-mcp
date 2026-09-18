@@ -9,10 +9,15 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 export const SLOW_REQUEST_TIMEOUT_MS = 300_000;   // cold solution-wide scan measured at 60 s idle, >120 s on a busy laptop (866 files)
 const SLOW_METHODS = new Set(["textDocument/references", "workspace/symbol"]);
 export const DIAGNOSTICS_TIMEOUT_MS = 3_000;
+// The server publishes twice per validation: the fast structural list about 1 s after a
+// change, then the combined list once its async validators finish (measured 1.4-5.4 s later).
+export const DIAGNOSTICS_SETTLE_MS = 8_000;
 export const READY_TIMEOUT_MS = 30_000;
 
 export interface SpawnSpec { command: string; args: string[]; cwd: string; env?: Record<string, string>; }
-export interface ClientOptions { readyTimeoutMs?: number; requestTimeoutMs?: number; diagnosticsTimeoutMs?: number; }
+export interface ClientOptions {
+  readyTimeoutMs?: number; requestTimeoutMs?: number; diagnosticsTimeoutMs?: number; diagnosticsSettleMs?: number;
+}
 export interface Position { line: number; character: number; }
 export interface Range { start: Position; end: Position; }
 export interface Diagnostic { severity?: number; range: Range; message: string; }

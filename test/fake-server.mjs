@@ -1,7 +1,7 @@
 // Minimal stand-in for the Clarion language server. Speaks LSP over stdio.
 // Env: FAKE_PROJECT_DIR (project path), FAKE_REDIR_PATH (findFile answer for redir.inc),
 //      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover),
-//      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics).
+//      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics), FAKE_TWO_PHASE=1 (empty publish, then the real one).
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 
 const conn = createMessageConnection(
@@ -21,6 +21,13 @@ function publish(uri, text) {
   if (process.env.FAKE_NO_DIAGNOSTICS) return;
   const diagnostics = text.includes("BAD")
     ? [{ severity: 1, range: r(0, 0, 0, 3), message: "Unknown identifier BAD" }] : [];
+  // FAKE_TWO_PHASE=1 mimics the real server: an empty structural publish first, the full
+  // list 150 ms later.
+  if (process.env.FAKE_TWO_PHASE) {
+    conn.sendNotification("textDocument/publishDiagnostics", { uri, diagnostics: [] });
+    setTimeout(() => conn.sendNotification("textDocument/publishDiagnostics", { uri, diagnostics }), 150);
+    return;
+  }
   conn.sendNotification("textDocument/publishDiagnostics", { uri, diagnostics });
 }
 conn.onNotification("textDocument/didOpen", ({ textDocument }) =>
