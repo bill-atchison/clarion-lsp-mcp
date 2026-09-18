@@ -58,3 +58,32 @@ process loads the patched files.
 
 Copy each `*.js.orig` back over its `*.js` in
 `lsp-server\out\server\src\{utils\ScopeAnalyzer.js, DocumentStructure.js, providers\DefinitionProvider.js}`.
+
+## colon-references
+
+**Upstream issue:** https://github.com/msarson/Clarion-Extension/issues/596 (filed 2026-09-18).
+
+**Problem.** Find-references returns nothing for any colon-prefixed procedure label
+(`reg:ITEM:CashOutExists`, `reg:WIN:ShowExits`), which in a prefixed codebase is nearly
+every procedure. Three causes:
+
+1. `ReferenceCountIndex` (the per-file pre-filter) is built from a word regex that splits
+   identifiers at colons, so it never holds `reg:item:cashoutexists` and prunes every file
+   before the token scan runs.
+2. Call sites tokenize as `StructurePrefix ':' Function`; the per-file scan compares
+   single token values to the whole search word, so no call site can match.
+3. For a prototype that lives in an include, the symbol finder falls through to a
+   partial structure-field match (`WIN:ShowExits` on a FILE with `PRE(REG)`) and takes
+   the field route.
+
+**Fix.** `mayContain` also accepts a file when the last colon segment is counted; the
+per-file scan rejoins the prefix chain before comparing; a colon word that only
+partially matched a field is sent down the procedure-hunt route.
+
+Files: `colon-references.cjs`, `colon-references.patch`, `verify-colon-references.mjs`
+(`ONLY=same|cross` limits the cases; `SHOW_STDERR=1` prints `[TRACE]` lines if any).
+Verify and apply exactly as for include-prototypes, substituting the file names.
+Expected: same-project 3 refs (call site, MAP declaration, implementation);
+cross-project 13 refs including `regWindow.clw` line 157.
+
+Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCountIndex.js.orig`.

@@ -1,0 +1,62 @@
+--- a/out/server/src/providers/ReferencesProvider.js
++++ b/out/server/src/providers/ReferencesProvider.js
+@@ -413,7 +413,13 @@
+             return classTypeRef;
+         }
+         // Plain symbol path
+-        const symbolInfo = await this.symbolFinder.findSymbol(word, document, position);
++        let symbolInfo = await this.symbolFinder.findSymbol(word, document, position);
++        // PATCH clarion-lsp-mcp#colon-references: a prefixed label that only partially matched a structure field is a
++        // procedure (or global) label, not that field. Fall through to the procedure hunt.
++        if (symbolInfo && word.includes(':') && symbolInfo.scope && symbolInfo.scope.type === 'field' &&
++            String(symbolInfo.token && symbolInfo.token.value).toLowerCase() !== word.toLowerCase()) {
++            symbolInfo = null;
++        }
+         if (!symbolInfo) {
+             // Fallback: check if word is a MAP/MODULE-declared procedure (not a variable)
+             this.trace({ route: 'procedure-hunt', word });
+@@ -2715,6 +2721,29 @@
+                     // label="ZipQueueType" but the Label token on the same line already matches.
+                     matchLength = token.label.length;
+                 }
++                else if (searchWordLower.includes(':') &&
++                    (token.type === ClarionTokenizer_1.TokenType.Function ||
++                     token.type === ClarionTokenizer_1.TokenType.Label ||
++                     token.type === ClarionTokenizer_1.TokenType.Variable) &&
++                    searchWordLower.endsWith(':' + token.value.toLowerCase())) {
++                    // PATCH clarion-lsp-mcp#colon-references: rejoin the "StructurePrefix ':'" chain that precedes this token
++                    // on the same line and compare the whole label.
++                    let joined = token.value;
++                    let firstStart = token.start;
++                    let j = i - 1;
++                    while (j >= 1 && tokens[j].line === token.line && tokens[j].value === ':' &&
++                           tokens[j - 1].line === token.line &&
++                           tokens[j - 1].type === ClarionTokenizer_1.TokenType.StructurePrefix) {
++                        joined = tokens[j - 1].value + ':' + joined;
++                        firstStart = tokens[j - 1].start;
++                        j -= 2;
++                    }
++                    if (joined.toLowerCase() !== searchWordLower) {
++                        continue;
++                    }
++                    matchStart = firstStart;
++                    matchLength = joined.length;
++                }
+                 else {
+                     continue;
+                 }
+--- a/out/server/src/services/ReferenceCountIndex.js
++++ b/out/server/src/services/ReferenceCountIndex.js
+@@ -177,6 +177,12 @@
+             return true;
+         if (((_a = counts.get(nameLower)) !== null && _a !== void 0 ? _a : 0) > 0)
+             return true;
++        // PATCH clarion-lsp-mcp#colon-references: the index splits identifiers at ':'; test the last segment of a prefixed name.
++        if (nameLower.includes(':')) {
++            const tail = nameLower.split(':').pop();
++            if (tail && (counts.get(tail) || 0) > 0)
++                return true;
++        }
+         // Zero count → prune ONLY if the on-disk file still matches the scan.
+         // Clarion app generation rewrites CLW files with no editor event; a
+         // stale entry must not silently drop references from FAR results.
