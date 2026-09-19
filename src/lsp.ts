@@ -94,7 +94,10 @@ export class LspClient {
     if (!this.conn || !this._running) return Promise.reject(new Error("Language server is not running"));
     // Solution-wide scans on large solutions can run well past 15 s while the server's
     // indexes are still warm-up cold; give them a longer budget than point lookups.
-    const ms = this.opts.requestTimeoutMs ?? (SLOW_METHODS.has(method) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+    // "initialize" is answered by a process that is still loading its module graph; on a busy
+    // laptop that exceeded 15 s, so the handshake gets the same budget as solution readiness.
+    const ms = this.opts.requestTimeoutMs ??
+      (method === "initialize" ? READY_TIMEOUT_MS : SLOW_METHODS.has(method) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
     // Clear the timer once the request settles: a live timer keeps the process alive for the
     // whole budget (minutes for slow methods) after the answer has already arrived.
     let timer: NodeJS.Timeout | undefined;
