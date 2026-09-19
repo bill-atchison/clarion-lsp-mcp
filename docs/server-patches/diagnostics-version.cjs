@@ -1,8 +1,11 @@
 // Patch 4 for the Clarion Assistant language server: stamp publishDiagnostics with the document
-// version (LSP 3.15 `PublishDiagnosticsParams.version`). The server publishes twice per validation
-// (structural pass, then the combined list once the async validators finish) and never says which
-// document version a publish belongs to, so a client cannot tell a stale publish from a fresh one,
-// or a structural-only answer from the complete one. Idempotent per edit; .orig backup; CRLF kept.
+// version (LSP 3.15 `PublishDiagnosticsParams.version`), and send Clarion-Extension 1.0.4's
+// `clarion/diagnosticsStatus` { uri, version, state } after each validation outcome (upstream #460:
+// complete, deferred, superseded). The server publishes twice per validation (structural pass, then
+// the combined list once the async validators finish) and never says which document version a
+// publish belongs to or when the answer is whole; a cross-file update can even validate a document
+// twice for one version, so counting publishes cannot tell a structural-only answer from the
+// complete one. Idempotent per edit (upgrades an install carrying edits a-c); .orig backup; CRLF kept.
 // Set PATCH_SRC to patch a copy instead of the install.
 const fs = require("fs");
 const S = process.env.PATCH_SRC || "C:/Clarion12/accessory/addins/ClarionAssistant/lsp-server/out/server/src/";
@@ -48,5 +51,75 @@ patch("server.js", [
         connection.sendDiagnostics({ uri: document.uri, diagnostics });`,
 `        diagnostics.push(...asyncDiags);
         connection.sendDiagnostics({ uri: document.uri, diagnostics, version: startVersion }); ${MARK} stamp version`
+  ],
+  // (d) libsrc files: the structural publish is the whole answer.
+  [
+`                caller
+            });
+            return;
+        }
+        // Send sync diagnostics immediately for fast feedback`,
+`                caller
+            });
+            connection.sendNotification('clarion/diagnosticsStatus', { uri: document.uri, version: startVersion, state: 'complete' }); ${MARK} status (#460 backport)
+            return;
+        }
+        // Send sync diagnostics immediately for fast feedback`
+  ],
+  // (e) async validators deferred until the pipelines are ready: the sdiReady pass validates again.
+  [
+`                sdi_ready: String(sdiPipelineReady),
+                token_count: tokens.length,
+                diag_count: diagnostics.length,
+                uri: document.uri,
+                caller
+            });
+            return;`,
+`                sdi_ready: String(sdiPipelineReady),
+                token_count: tokens.length,
+                diag_count: diagnostics.length,
+                uri: document.uri,
+                caller
+            });
+            connection.sendNotification('clarion/diagnosticsStatus', { uri: document.uri, version: startVersion, state: 'deferred' }); ${MARK} status (#460 backport)
+            return;`
+  ],
+  // (f) the document changed during the async pass: this version's answer is discarded.
+  [
+`            perfLogger.perf("validateTextDocument stale-skip", {
+                total_ms: Date.now() - validateStart,
+                token_count: tokens.length,
+                uri: document.uri,
+                caller
+            });
+            return;`,
+`            perfLogger.perf("validateTextDocument stale-skip", {
+                total_ms: Date.now() - validateStart,
+                token_count: tokens.length,
+                uri: document.uri,
+                caller
+            });
+            connection.sendNotification('clarion/diagnosticsStatus', { uri: document.uri, version: startVersion, state: 'superseded' }); ${MARK} status (#460 backport)
+            return;`
+  ],
+  // (g) the combined list is out: the whole answer for this version.
+  [
+`            async_ms: asyncMs,
+            token_count: tokens.length,
+            diag_count: diagnostics.length,
+            uri: document.uri,
+            caller
+        });
+    }
+    catch (error) {`,
+`            async_ms: asyncMs,
+            token_count: tokens.length,
+            diag_count: diagnostics.length,
+            uri: document.uri,
+            caller
+        });
+        connection.sendNotification('clarion/diagnosticsStatus', { uri: document.uri, version: startVersion, state: 'complete' }); ${MARK} status (#460 backport)
+    }
+    catch (error) {`
   ],
 ]);

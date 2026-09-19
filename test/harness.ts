@@ -5,6 +5,7 @@ import path from "node:path";
 import { createSession, registerTools, type Session, type SessionOptions } from "../src/tools.js";
 
 const FAKE = path.resolve("test/fake-server.mjs");
+const FAKE_STATUS = path.resolve("test/fake-server-status.mjs");   // names clarion/diagnosticsStatus, see there
 
 /** Fake Clarion root: never touched on disk; the spawn spec runs the fake server instead. */
 export const fakeRoot = { root: "C:\\FakeClarion", version: "12.0.0", serverDir: "C:\\FakeClarion\\srv",
@@ -14,7 +15,7 @@ export async function connect(env: Record<string, string> = {}, extra: Partial<S
   const session: Session = createSession({
     cwd: process.cwd(),
     findRoot: () => fakeRoot,
-    spawnSpec: () => ({ command: process.execPath, args: [FAKE], cwd: process.cwd(), env }),
+    spawnSpec: () => ({ command: process.execPath, args: [env.FAKE_STATUS ? FAKE_STATUS : FAKE], cwd: process.cwd(), env }),
     // Generous relative to the fake server's own work: under vitest's parallel workers this host's
     // cold process-spawn + ESM-import handshake can take several hundred ms (see the Task 4 note in
     // the implementation notes), and running the whole suite concurrently adds CPU contention on top.

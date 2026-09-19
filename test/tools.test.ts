@@ -168,6 +168,16 @@ describe("diagnostics and project files", () => {
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
+  it("ignores the publish count once the server sends diagnosticsStatus", async () => {
+    h = await connect({ FAKE_STATUS: "1", FAKE_DOUBLE_STRUCTURAL: "1" });   // two structural publishes, then the list + status
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
+    await h.call("open_solution", { solution_path: sln });
+    // Counting would resolve on the second structural publish with count 0.
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data).toEqual({ pending: false, complete: true, indexing: false, count: 1,
+      diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
+  });
+
   it("revalidates documents opened before the graph was built and drops their provisional warnings", async () => {
     h = await connect({ FAKE_LATE_GRAPH: "700" });   // "built" arrives 700 ms after solutionReady
     const sln = solution();

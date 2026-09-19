@@ -161,12 +161,24 @@ from the complete one, so a freshly opened or edited file can look clean.
 **Fix.** Stamp all three `sendDiagnostics` calls in `server.js` with the document version
 (`document.version` for the two structural sends, `startVersion` for the combined send,
 which is already guarded against a newer version). The MCP keys its wait on the version it
-sent, ignores other versions, and expects two publishes for a source file and one for a
-file under a libsrc path (`complete: false` when only the first has arrived within 20 s).
+sent and ignores other versions.
 
-Files: `diagnostics-version.cjs`, `diagnostics-version.patch`. Verify with
-`docs\server-patches\..\..\` scratch probe `raw-diag.mjs` pattern or simply apply and run
-`lsp_diagnostics` on a source file: the reply carries `complete: true` after both publishes.
-Apply exactly as for include-prototypes, substituting the file name.
+Amendment (2026-09-19, live run 6 TC-19 follow-up): counting publishes is not enough either.
+A cross-file update (a MEMBER's parent opened while the member is open, which happens whenever
+a batch of documents is opened together) validates a document a second time for the same
+version, so two structural publishes can arrive before any combined list and the count reads
+them as complete (seen: `reg_HAZ_HazardMessage.clw` reported complete with its structural
+warning only, the "not declared" warning missing). Edits d-g backport upstream #460: after
+each validation outcome the server sends `clarion/diagnosticsStatus` `{ uri, version, state }`
+with `complete` (libsrc structural-only answer, or the combined list), `deferred` (async
+validators skipped while the pipelines are not ready) or `superseded` (the document changed
+during the async pass), exactly where 1.0.5 sends them. The MCP detects the method name in the
+server's main file at start and, on such a server, trusts the status alone; the publish count
+remains only for a server without it.
+
+Files: `diagnostics-version.cjs` (edits a-g, idempotent per edit), `diagnostics-version.patch`.
+Verify by applying and running `lsp_diagnostics` on a source file: the reply carries
+`complete: true` once the status arrives, and `lsp_debug_status` on the MCP shows nothing new
+(the flag is internal). Apply exactly as for include-prototypes, substituting the file name.
 
 Revert: restore `server.js.orig`.

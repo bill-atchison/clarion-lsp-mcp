@@ -253,7 +253,7 @@ export function registerTools(server: McpServer, s: Session): void {
     if (state === undefined) return { pending: true, complete: false, indexing, count: 0, diagnostics: [] };
     const diagnostics = state.diagnostics.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
       character: d.range.start.character, message: d.message }));
-    return { pending: false, complete: isComplete(state, expected) && !indexing, indexing, count: diagnostics.length, diagnostics };
+    return { pending: false, complete: isComplete(state, expected, c.statusCapable) && !indexing, indexing, count: diagnostics.length, diagnostics };
   }))());
 
   server.registerTool("get_project_source_files", {

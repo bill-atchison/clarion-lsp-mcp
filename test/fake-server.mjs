@@ -3,6 +3,8 @@
 //      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover),
 //      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics), FAKE_ONE_PHASE=1 (single publish, like a libsrc file),
 //      FAKE_INDEXING=1 (graphStatus never reaches "built"),
+//      FAKE_DOUBLE_STRUCTURAL=1 (two structural publishes before the combined one, like a cross-file
+//      update validating a document twice for one version),
 //      FAKE_LATE_GRAPH=<ms> ("built" arrives that long after solutionReady; publishes before it carry a
 //      spurious "not declared" warning, like the real server validating without its file graph).
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
@@ -29,7 +31,7 @@ conn.onNotification("clarion/updatePaths", p => {
 let graphBuilt = false;
 // Like the real (patched) server: a structural publish first, the complete list 150 ms later,
 // both stamped with the document version. FAKE_ONE_PHASE=1 publishes only once (a libsrc file).
-// FAKE_STATUS=1 also sends clarion/diagnosticsStatus complete after the last publish (1.0.4+ servers).
+// FAKE_STATUS=1 also sends the 1.0.4+ diagnostics status notification (complete) after the last publish (1.0.4+ servers).
 function publish(uri, version, text) {
   if (process.env.FAKE_NO_DIAGNOSTICS) return;
   const diagnostics = text.includes("BAD")
@@ -38,10 +40,13 @@ function publish(uri, version, text) {
     diagnostics.push({ severity: 2, range: r(1, 2, 1, 6), message: "'Exits_OK' is not declared in this file." });
   const last = () => {
     conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics });
-    if (process.env.FAKE_STATUS) conn.sendNotification("clarion/diagnosticsStatus", { uri, version, state: "complete" });
+    // The method name is assembled so the client's static probe of this file (see LspClient.start)
+    // does not see it; fake-server-status.mjs carries the literal for the runs that want it found.
+    if (process.env.FAKE_STATUS) conn.sendNotification("clarion/" + "diagnosticsStatus", { uri, version, state: "complete" });
   };
   if (process.env.FAKE_ONE_PHASE) { last(); return; }
   conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics: [] });
+  if (process.env.FAKE_DOUBLE_STRUCTURAL) conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics: [] });
   setTimeout(last, 150);
 }
 conn.onNotification("textDocument/didOpen", ({ textDocument }) =>

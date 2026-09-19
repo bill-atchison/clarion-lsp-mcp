@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter,
          type MessageConnection } from "vscode-jsonrpc/node";
@@ -22,8 +22,11 @@ export interface Range { start: Position; end: Position; }
  *  sends two for a source file, one for a library file). */
 /** `status` is the server's `clarion/diagnosticsStatus` for the version last sent (Clarion-Extension
  *  1.0.4+); older servers never send it and completeness falls back to counting publishes. */
-export const isComplete = (d: DiagnosticState, publishes: number): boolean =>
-  d.status === "complete" || d.publishes >= publishes;
+/** `statusCapable`: the server has sent a status at least once, so the count is not consulted: a
+ *  cross-file update while a batch of documents opens validates a document twice for one version,
+ *  and its two structural publishes would satisfy the count before any combined list arrives. */
+export const isComplete = (d: DiagnosticState, publishes: number, statusCapable = false): boolean =>
+  d.status === "complete" || (!statusCapable && d.publishes >= publishes);
 export interface DiagnosticState { diagnostics: Diagnostic[]; publishes: number; status?: DiagnosticsStatus; }
 export type DiagnosticsStatus = "complete" | "deferred" | "superseded";
 export interface Diagnostic { severity?: number; range: Range; message: string; }
@@ -49,6 +52,12 @@ export class LspClient {
   readonly diagnostics = new Map<string, DiagnosticState>();
   readonly stderrTail: string[] = [];
   notificationCount = 0;
+  /** The server sends `clarion/diagnosticsStatus` (Clarion-Extension 1.0.4+, or the v1.0.2 snapshot
+   *  with the diagnostics-version patch); completeness then comes from it alone. Neither server
+   *  advertises it in `initialize`, so `start` looks for the method name in the server's main file
+   *  (it must be known before the first publish: the first batch of documents opened on a fresh
+   *  server can produce the double structural publish before any status has been seen). */
+  statusCapable = false;
   /** True from open_solution until the server reports its background file graph built
    *  (`clarion/graphStatus` status `built`). Until then the server defers or runs its semantic
    *  validators without cross-file data, so diagnostics can be structural-only or carry spurious
@@ -63,6 +72,7 @@ export class LspClient {
   get openDocumentCount() { return this.openDocs.size; }
 
   async start(rootUri: string): Promise<void> {
+    this.statusCapable = this.spec.args.some(a => existsSync(a) && readFileSync(a, "utf8").includes("clarion/diagnosticsStatus"));
     const child = spawn(this.spec.command, this.spec.args, {
       cwd: this.spec.cwd, env: { ...process.env, ...this.spec.env },
       stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
@@ -177,16 +187,17 @@ export class LspClient {
   waitForDiagnostics(uri: string, publishes = 1, ms = this.opts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS)
       : Promise<DiagnosticState | undefined> {
     const now = this.diagnostics.get(uri);
-    if (now && isComplete(now, publishes)) return Promise.resolve(now);
+    if (now && isComplete(now, publishes, this.statusCapable)) return Promise.resolve(now);
     return new Promise(resolve => {
       const remove = () => this.waiters.set(uri, (this.waiters.get(uri) ?? []).filter(w => w !== fn));
       const timer = setTimeout(() => { remove(); resolve(this.diagnostics.get(uri)); }, ms);
-      const fn = (d: DiagnosticState) => { if (!isComplete(d, publishes)) return; clearTimeout(timer); remove(); resolve(d); };
+      const fn = (d: DiagnosticState) => { if (!isComplete(d, publishes, this.statusCapable)) return; clearTimeout(timer); remove(); resolve(d); };
       this.waiters.set(uri, [...(this.waiters.get(uri) ?? []), fn]);
     });
   }
 
   private onDiagnosticsStatus(p: { uri: string; version: number; state: DiagnosticsStatus }) {
+    this.statusCapable = true;
     if (p.version !== this.versions.get(p.uri)) return;   // a status for a superseded version
     const state = { ...(this.diagnostics.get(p.uri) ?? { diagnostics: [], publishes: 0 }), status: p.state };
     this.diagnostics.set(p.uri, state);
