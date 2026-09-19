@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { findClarionRoot, findSolution, buildPaths,
          type ClarionRoot, type UpdatePathsParams } from "./clarion.js";
-import { LspClient, toUri, fromUri, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
+import { LspClient, toUri, fromUri, isComplete, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
 
 export interface SessionOptions {
   cwd: string;
@@ -249,7 +249,7 @@ export function registerTools(server: McpServer, s: Session): void {
     if (state === undefined) return { pending: true, complete: false, count: 0, diagnostics: [] };
     const diagnostics = state.diagnostics.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
       character: d.range.start.character, message: d.message }));
-    return { pending: false, complete: state.publishes >= expected, count: diagnostics.length, diagnostics };
+    return { pending: false, complete: isComplete(state, expected), count: diagnostics.length, diagnostics };
   }))());
 
   server.registerTool("get_project_source_files", {

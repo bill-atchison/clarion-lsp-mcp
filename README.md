@@ -71,9 +71,11 @@ path in and out is an absolute Windows path.
 within 20 seconds. Treat that as unknown, not as clean. The server publishes a
 fast structural pass first and the full list once its semantic validators finish;
 `complete: false` means only the first has arrived, so call again for the rest.
-(That distinction needs the `diagnostics-version` server patch in
-`docs/server-patches`; without it stale publishes for a previous edit cannot be
-told apart from fresh ones.)
+Completeness comes from the server's `clarion/diagnosticsStatus` notification
+(Clarion-Extension 1.0.4 and later). The v1.0.2 snapshot bundled with Clarion
+Assistant does not send it, so there the client counts publishes per document
+version instead, which needs the `diagnostics-version` server patch in
+`docs/server-patches`.
 
 ## How it works
 

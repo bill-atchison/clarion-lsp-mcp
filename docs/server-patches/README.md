@@ -108,7 +108,10 @@ Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCo
 
 ## workspace-symbols
 
-**Upstream issue:** not filed yet; the text is in `ISSUE-workspace-symbols.md`.
+**Upstream issue:** https://github.com/msarson/Clarion-Extension/issues/604 (filed 2026-09-18 against
+tag `v1.0.5`, where cause 1 still reproduces: 158 giant names, 9.2 MB; the patch applied to a v1.0.5
+build gives 1374 symbols, 0 giants, 0.4 MB). Cause 2 below did not reproduce on v1.0.5 and is not
+part of the issue.
 
 **Problem.** Workspace symbol search (`workspace/symbol`, `lsp_find_symbol`, Ctrl+T in the IDE)
 returns entries whose `name` is 100,000+ characters long, and the same symbol twice. On the
@@ -139,7 +142,13 @@ Revert: restore `providers\ClarionDocumentSymbolProvider.js.orig` and `providers
 
 ## diagnostics-version
 
-**Upstream issue:** not filed yet; the text is in `ISSUE-diagnostics-version.md`.
+**Upstream issue:** not filed. Clarion-Extension 1.0.4 solved the same problem another way:
+`clarion/diagnosticsStatus` (upstream #460) carries the document version and a `complete`,
+`deferred` or `superseded` state, and the MCP consumes it when present. Verified against a
+v1.0.5 build compiled from source: `publishDiagnostics` still has no `version`, and the status
+notification arrives right after the final publish. This patch stays only for the v1.0.2 snapshot
+bundled with Clarion Assistant; delete it once the Assistant pin moves (ClarionAssistant#224).
+The draft text remains in `ISSUE-diagnostics-version.md` for reference.
 
 **Problem.** `textDocument/publishDiagnostics` carries no `version` (LSP 3.15). The server
 publishes twice per validation of a source file: the structural pass about 1 s after a

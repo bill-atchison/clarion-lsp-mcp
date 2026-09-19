@@ -20,7 +20,12 @@ export interface Position { line: number; character: number; }
 export interface Range { start: Position; end: Position; }
 /** Publishes received for the document version last sent; `publishes` counts them (the server
  *  sends two for a source file, one for a library file). */
-export interface DiagnosticState { diagnostics: Diagnostic[]; publishes: number; }
+/** `status` is the server's `clarion/diagnosticsStatus` for the version last sent (Clarion-Extension
+ *  1.0.4+); older servers never send it and completeness falls back to counting publishes. */
+export const isComplete = (d: DiagnosticState, publishes: number): boolean =>
+  d.status === "complete" || d.publishes >= publishes;
+export interface DiagnosticState { diagnostics: Diagnostic[]; publishes: number; status?: DiagnosticsStatus; }
+export type DiagnosticsStatus = "complete" | "deferred" | "superseded";
 export interface Diagnostic { severity?: number; range: Range; message: string; }
 
 /** The server's canonical form is VS Code's: lower-case drive, encoded colon (file:///c%3A/...). */
@@ -70,6 +75,7 @@ export class LspClient {
     conn.onNotification((method: string, params: unknown) => {
       this.notificationCount++;
       if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; version?: number; diagnostics: Diagnostic[] });
+      if (method === "clarion/diagnosticsStatus") this.onDiagnosticsStatus(params as { uri: string; version: number; state: DiagnosticsStatus });
       if (method === "clarion/solutionReady") this.readyResolve?.(params as { solutionFilePath?: string });
     });
     conn.onRequest(() => null);            // server-to-client requests we do not implement
@@ -135,18 +141,26 @@ export class LspClient {
     return { uri, changed: true };
   }
 
-  /** Resolve once `publishes` publishes have arrived for the document version last sent, or at the
-   *  deadline with whatever has arrived (undefined when nothing has). */
+  /** Resolve once the server reports the version last sent complete, or once `publishes` publishes
+   *  have arrived for it (servers without `clarion/diagnosticsStatus`), or at the deadline with
+   *  whatever has arrived (undefined when nothing has). */
   waitForDiagnostics(uri: string, publishes = 1, ms = this.opts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS)
       : Promise<DiagnosticState | undefined> {
     const now = this.diagnostics.get(uri);
-    if (now && now.publishes >= publishes) return Promise.resolve(now);
+    if (now && isComplete(now, publishes)) return Promise.resolve(now);
     return new Promise(resolve => {
       const remove = () => this.waiters.set(uri, (this.waiters.get(uri) ?? []).filter(w => w !== fn));
       const timer = setTimeout(() => { remove(); resolve(this.diagnostics.get(uri)); }, ms);
-      const fn = (d: DiagnosticState) => { if (d.publishes < publishes) return; clearTimeout(timer); remove(); resolve(d); };
+      const fn = (d: DiagnosticState) => { if (!isComplete(d, publishes)) return; clearTimeout(timer); remove(); resolve(d); };
       this.waiters.set(uri, [...(this.waiters.get(uri) ?? []), fn]);
     });
+  }
+
+  private onDiagnosticsStatus(p: { uri: string; version: number; state: DiagnosticsStatus }) {
+    if (p.version !== this.versions.get(p.uri)) return;   // a status for a superseded version
+    const state = { ...(this.diagnostics.get(p.uri) ?? { diagnostics: [], publishes: 0 }), status: p.state };
+    this.diagnostics.set(p.uri, state);
+    for (const fn of [...(this.waiters.get(p.uri) ?? [])]) fn(state);
   }
 
   private onDiagnostics(p: { uri: string; version?: number; diagnostics: Diagnostic[] }) {

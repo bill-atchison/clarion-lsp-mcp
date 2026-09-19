@@ -1,6 +1,9 @@
 # publishDiagnostics has no `version`, so clients cannot tell the structural pass, the complete list, and stale publishes apart
 
-Draft for msarson/Clarion-Extension. Not filed yet.
+Draft for msarson/Clarion-Extension. **Not filed:** 1.0.4 added `clarion/diagnosticsStatus`
+(#460), which carries the version and a completion state, and the MCP now uses it. Verified on a
+v1.0.5 build (2026-09-18): `publishDiagnostics` still has no `version`; the status notification
+arrives right after the final publish (`version=1 complete`, `version=2 complete`, ...).
 
 **Build:** Clarion Assistant addin `lsp-server` shipped with Clarion 12.0.0.14000 (banner `[TGLO-FIX BUILD]`). Same code on upstream branch `version-1.0.5`.
 

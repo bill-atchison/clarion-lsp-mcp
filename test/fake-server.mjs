@@ -19,16 +19,18 @@ conn.onNotification("clarion/updatePaths", p => {
 });
 // Like the real (patched) server: a structural publish first, the complete list 150 ms later,
 // both stamped with the document version. FAKE_ONE_PHASE=1 publishes only once (a libsrc file).
+// FAKE_STATUS=1 also sends clarion/diagnosticsStatus complete after the last publish (1.0.4+ servers).
 function publish(uri, version, text) {
   if (process.env.FAKE_NO_DIAGNOSTICS) return;
   const diagnostics = text.includes("BAD")
     ? [{ severity: 1, range: r(0, 0, 0, 3), message: "Unknown identifier BAD" }] : [];
-  if (process.env.FAKE_ONE_PHASE) {
+  const last = () => {
     conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics });
-    return;
-  }
+    if (process.env.FAKE_STATUS) conn.sendNotification("clarion/diagnosticsStatus", { uri, version, state: "complete" });
+  };
+  if (process.env.FAKE_ONE_PHASE) { last(); return; }
   conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics: [] });
-  setTimeout(() => conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics }), 150);
+  setTimeout(last, 150);
 }
 conn.onNotification("textDocument/didOpen", ({ textDocument }) =>
   publish(textDocument.uri, textDocument.version, textDocument.text));

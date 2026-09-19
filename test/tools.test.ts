@@ -147,6 +147,16 @@ describe("diagnostics and project files", () => {
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
+  it("trusts clarion/diagnosticsStatus complete over the publish count", async () => {
+    h = await connect({ FAKE_ONE_PHASE: "1", FAKE_STATUS: "1" });   // one publish, then status complete
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
+    await h.call("open_solution", { solution_path: sln });
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: false, complete: true, count: 1,
+      diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
+  });
+
   it("reports pending:true when no diagnostics arrive in time", async () => {
     h = await connect({ FAKE_NO_DIAGNOSTICS: "1" });   // harness sets diagnosticsTimeoutMs to 1000
     const sln = solution();
