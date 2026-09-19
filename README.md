@@ -26,7 +26,13 @@ Not yet published to npm. Until it is, build and register the local copy:
     claude mcp add -s user clarion-lsp -- node <full path>\clarion-lsp-mcp\dist\index.js
 
 Registering the `npx` form below before the package is published makes the
-host report `CONNECTION_CLOSED`, because `npx` cannot download it.
+host report `CONNECTION_CLOSED`, because `npx` cannot download it. To try the
+packed tarball instead (`npm pack` writes `clarion-lsp-mcp-<version>.tgz`):
+
+    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.0.tgz clarion-lsp-mcp
+
+Publishing: `npm login`, then `npm publish --access public`. The
+`prepublishOnly` script runs the typecheck, the tests and the build first.
 
 Claude Code:
 
