@@ -129,21 +129,21 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
     expect((await h.call("lsp_diagnostics", { file_path: file })).data)
-      .toEqual({ pending: false, count: 0, diagnostics: [] });
+      .toEqual({ pending: false, complete: true, count: 0, diagnostics: [] });
     expect((await h.call("lsp_diagnostics", { file_path: file })).data.pending).toBe(false);
     writeFileSync(file, "  BAD\n");
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: false, count: 1,
+    expect(r).toEqual({ pending: false, complete: true, count: 1,
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
-  it("waits for the server's second publish after an edit instead of reporting the first as final", async () => {
-    h = await connect({ FAKE_TWO_PHASE: "1" });
+  it("reports complete:false when only the structural publish has arrived", async () => {
+    h = await connect({ FAKE_ONE_PHASE: "1" });   // a source file whose second publish never comes
     const sln = solution();
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
     await h.call("open_solution", { solution_path: sln });
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: false, count: 1,
+    expect(r).toEqual({ pending: false, complete: false, count: 1,
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
@@ -153,7 +153,7 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: true, count: 0, diagnostics: [] });
+    expect(r).toEqual({ pending: true, complete: false, count: 0, diagnostics: [] });
   });
 
   it("lists absolute .clw/.inc paths per project, resolves redirected files, and reports unresolved ones", async () => {

@@ -52,14 +52,15 @@ describe("LspClient", () => {
     await client.openSolution(params(dir));
     const first = await client.openDocument(file);
     expect(first.changed).toBe(true);
-    expect(await client.waitForDiagnostics(first.uri, 2000)).toEqual([]);
+    expect(await client.waitForDiagnostics(first.uri, 2, 2000)).toEqual({ diagnostics: [], publishes: 2 });
     expect((await client.openDocument(file)).changed).toBe(false);
     writeFileSync(file, "  BAD\n");
     const third = await client.openDocument(file);
     expect(third.changed).toBe(true);
-    const diags = await client.waitForDiagnostics(third.uri, 2000);
-    expect(diags?.[0].message).toMatch(/BAD/);
-    expect(client.diagnostics.get(third.uri)).toEqual(diags);
+    const state = await client.waitForDiagnostics(third.uri, 2, 2000);
+    expect(state?.publishes).toBe(2);
+    expect(state?.diagnostics[0].message).toMatch(/BAD/);
+    expect(client.diagnostics.get(third.uri)).toEqual(state);
     expect(client.openDocumentCount).toBe(1);
   });
 

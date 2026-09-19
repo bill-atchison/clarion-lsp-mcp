@@ -136,3 +136,28 @@ added cooperative yielding, not caching across scans). On a busy laptop it excee
 the MCP gives references and symbol search a 300 s budget (`SLOW_REQUEST_TIMEOUT_MS`).
 
 Revert: restore `providers\ClarionDocumentSymbolProvider.js.orig` and `providers\WorkspaceSymbolProvider.js.orig`.
+
+## diagnostics-version
+
+**Upstream issue:** not filed yet; the text is in `ISSUE-diagnostics-version.md`.
+
+**Problem.** `textDocument/publishDiagnostics` carries no `version` (LSP 3.15). The server
+publishes twice per validation of a source file: the structural pass about 1 s after a
+change and the combined list once its async validators finish, 0.7 to 10 s later depending
+on load; a library file gets the structural pass only. Without the version a client cannot
+tell a stale publish for the previous text from a fresh one (observed: the previous
+version's structural pass arriving after the next `didChange`), nor a structural-only answer
+from the complete one, so a freshly opened or edited file can look clean.
+
+**Fix.** Stamp all three `sendDiagnostics` calls in `server.js` with the document version
+(`document.version` for the two structural sends, `startVersion` for the combined send,
+which is already guarded against a newer version). The MCP keys its wait on the version it
+sent, ignores other versions, and expects two publishes for a source file and one for a
+file under a libsrc path (`complete: false` when only the first has arrived within 20 s).
+
+Files: `diagnostics-version.cjs`, `diagnostics-version.patch`. Verify with
+`docs\server-patches\..\..\` scratch probe `raw-diag.mjs` pattern or simply apply and run
+`lsp_diagnostics` on a source file: the reply carries `complete: true` after both publishes.
+Apply exactly as for include-prototypes, substituting the file name.
+
+Revert: restore `server.js.orig`.

@@ -8,18 +8,19 @@ import type { UpdatePathsParams } from "./clarion.js";
 export const REQUEST_TIMEOUT_MS = 15_000;
 export const SLOW_REQUEST_TIMEOUT_MS = 300_000;   // cold solution-wide scan measured at 60 s idle, >120 s on a busy laptop (866 files)
 const SLOW_METHODS = new Set(["textDocument/references", "workspace/symbol"]);
-export const DIAGNOSTICS_TIMEOUT_MS = 3_000;
-// The server publishes twice per validation: the fast structural list about 1 s after a
-// change, then the combined list once its async validators finish (measured 1.4-5.4 s later).
-export const DIAGNOSTICS_SETTLE_MS = 8_000;
+// The server publishes twice per validation of a source file: the structural pass, then the
+// combined list once its async validators finish. Measured 1.4-5.4 s apart on an idle laptop and
+// up to 10 s after a change while the server is still indexing a freshly opened solution.
+export const DIAGNOSTICS_TIMEOUT_MS = 20_000;
 export const READY_TIMEOUT_MS = 30_000;
 
 export interface SpawnSpec { command: string; args: string[]; cwd: string; env?: Record<string, string>; }
-export interface ClientOptions {
-  readyTimeoutMs?: number; requestTimeoutMs?: number; diagnosticsTimeoutMs?: number; diagnosticsSettleMs?: number;
-}
+export interface ClientOptions { readyTimeoutMs?: number; requestTimeoutMs?: number; diagnosticsTimeoutMs?: number; }
 export interface Position { line: number; character: number; }
 export interface Range { start: Position; end: Position; }
+/** Publishes received for the document version last sent; `publishes` counts them (the server
+ *  sends two for a source file, one for a library file). */
+export interface DiagnosticState { diagnostics: Diagnostic[]; publishes: number; }
 export interface Diagnostic { severity?: number; range: Range; message: string; }
 
 /** The server's canonical form is VS Code's: lower-case drive, encoded colon (file:///c%3A/...). */
@@ -37,9 +38,10 @@ export class LspClient {
   private _running = false;
   private openDocs = new Map<string, string>();      // uri -> last text sent
   private versions = new Map<string, number>();
-  private waiters = new Map<string, Array<(d: Diagnostic[]) => void>>();
+  private waiters = new Map<string, Array<(d: DiagnosticState) => void>>();
   private readyResolve?: (p: { solutionFilePath?: string } | undefined) => void;
-  readonly diagnostics = new Map<string, Diagnostic[]>();
+  /** Latest accepted publish per uri (a publish for a version other than the one last sent is ignored). */
+  readonly diagnostics = new Map<string, DiagnosticState>();
   readonly stderrTail: string[] = [];
   notificationCount = 0;
 
@@ -67,7 +69,7 @@ export class LspClient {
       new StreamMessageReader(child.stdout!), new StreamMessageWriter(child.stdin!));
     conn.onNotification((method: string, params: unknown) => {
       this.notificationCount++;
-      if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; diagnostics: Diagnostic[] });
+      if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; version?: number; diagnostics: Diagnostic[] });
       if (method === "clarion/solutionReady") this.readyResolve?.(params as { solutionFilePath?: string });
     });
     conn.onRequest(() => null);            // server-to-client requests we do not implement
@@ -118,6 +120,7 @@ export class LspClient {
     const text = readFileSync(filePath, "utf8");
     const last = this.openDocs.get(uri);
     if (last === text) return { uri, changed: false };
+    this.diagnostics.delete(uri);            // publishes for the previous version are stale from here on
     if (last === undefined) {
       this.versions.set(uri, 1);
       await this.notify("textDocument/didOpen",
@@ -132,21 +135,28 @@ export class LspClient {
     return { uri, changed: true };
   }
 
-  waitForDiagnostics(uri: string, ms = this.opts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS)
-      : Promise<Diagnostic[] | undefined> {
+  /** Resolve once `publishes` publishes have arrived for the document version last sent, or at the
+   *  deadline with whatever has arrived (undefined when nothing has). */
+  waitForDiagnostics(uri: string, publishes = 1, ms = this.opts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS)
+      : Promise<DiagnosticState | undefined> {
+    const now = this.diagnostics.get(uri);
+    if (now && now.publishes >= publishes) return Promise.resolve(now);
     return new Promise(resolve => {
       const remove = () => this.waiters.set(uri, (this.waiters.get(uri) ?? []).filter(w => w !== fn));
-      const timer = setTimeout(() => { remove(); resolve(undefined); }, ms);
-      const fn = (d: Diagnostic[]) => { clearTimeout(timer); remove(); resolve(d); };
+      const timer = setTimeout(() => { remove(); resolve(this.diagnostics.get(uri)); }, ms);
+      const fn = (d: DiagnosticState) => { if (d.publishes < publishes) return; clearTimeout(timer); remove(); resolve(d); };
       this.waiters.set(uri, [...(this.waiters.get(uri) ?? []), fn]);
     });
   }
 
-  private onDiagnostics(p: { uri: string; diagnostics: Diagnostic[] }) {
-    this.diagnostics.set(p.uri, p.diagnostics);
-    const list = this.waiters.get(p.uri) ?? [];
-    this.waiters.delete(p.uri);
-    for (const fn of list) fn(p.diagnostics);
+  private onDiagnostics(p: { uri: string; version?: number; diagnostics: Diagnostic[] }) {
+    // A versioned publish for anything but the version we last sent is stale (the server
+    // finishes validating the previous text after we have already sent the next one).
+    const sent = this.versions.get(p.uri);
+    if (p.version !== undefined && sent !== undefined && p.version !== sent) return;
+    const state = { diagnostics: p.diagnostics, publishes: (this.diagnostics.get(p.uri)?.publishes ?? 0) + 1 };
+    this.diagnostics.set(p.uri, state);
+    for (const fn of [...(this.waiters.get(p.uri) ?? [])]) fn(state);
   }
 
   async stop(): Promise<void> {

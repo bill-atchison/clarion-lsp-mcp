@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { findClarionRoot, findSolution, buildPaths,
          type ClarionRoot, type UpdatePathsParams } from "./clarion.js";
-import { LspClient, toUri, fromUri, DIAGNOSTICS_SETTLE_MS, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
+import { LspClient, toUri, fromUri, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
 
 export interface SessionOptions {
   cwd: string;
@@ -125,6 +125,15 @@ function openChecked(s: Session, c: LspClient, file_path: string) {
   return c.openDocument(checkFile(s, file_path));
 }
 
+/** The server skips its async validators for files under a libsrc path, so they get one publish. */
+function isLibsrcFile(s: Session, file: string): boolean {
+  const f = file.toLowerCase();
+  return (s.params?.libsrcPaths ?? []).some(dir => {
+    const d = dir.toLowerCase().replace(/[\\/]+$/, "");
+    return f.startsWith(d + "\\") || f.startsWith(d + "/");
+  });
+}
+
 /**
  * Position request against a file: opens the document first, then sends the request.
  * withClient's "no solution open" check runs before checkFile's "file not found" check (both are
@@ -226,23 +235,21 @@ export function registerTools(server: McpServer, s: Session): void {
 
   server.registerTool("lsp_diagnostics", {
     description: "Current errors and warnings for a file. pending:true means the server has not answered " +
-      "within 3 seconds; treat that as unknown, not clean. After a file changes, the answer waits for the " +
-      "server's second (complete) publish, which can take several seconds.",
+      "within 20 seconds; treat that as unknown, not clean. complete:false means only the server's fast " +
+      "structural pass has arrived and semantic warnings may follow; call again for the rest.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
-    const { uri, changed } = await openChecked(s, c, a.file_path);
-    let list = changed ? await c.waitForDiagnostics(uri) : c.diagnostics.get(uri);
-    if (list === undefined) return { pending: true, count: 0, diagnostics: [] };
-    if (changed) {
-      // The first publish after a change is the structural pass only; the semantic warnings
-      // arrive in a second publish a few seconds later. Reporting the first as final made a
-      // freshly edited file look clean. Wait for the second, bounded, and take the latest.
-      const settle = s.opts.clientOpts?.diagnosticsSettleMs ?? DIAGNOSTICS_SETTLE_MS;
-      list = (await c.waitForDiagnostics(uri, settle)) ?? c.diagnostics.get(uri) ?? list;
-    }
-    const diagnostics = list.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
+    const file = checkFile(s, a.file_path);
+    const { uri } = await c.openDocument(file);
+    // The server publishes a structural pass first and the combined list once its async
+    // validators finish; library files get the structural pass only. Reporting the first
+    // publish as final made a freshly opened or edited file look clean.
+    const expected = isLibsrcFile(s, file) ? 1 : 2;
+    const state = await c.waitForDiagnostics(uri, expected);
+    if (state === undefined) return { pending: true, complete: false, count: 0, diagnostics: [] };
+    const diagnostics = state.diagnostics.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
       character: d.range.start.character, message: d.message }));
-    return { pending: false, count: diagnostics.length, diagnostics };
+    return { pending: false, complete: state.publishes >= expected, count: diagnostics.length, diagnostics };
   }))());
 
   server.registerTool("get_project_source_files", {

@@ -370,6 +370,24 @@ methods 300 s. Verified on a patched copy and on the install: 1374 symbols, 0 ov
 cold and 2 s warm. Upstream issue text drafted in <code>ISSUE-workspace-symbols.md</code>, not yet filed.</p>
 </div>
 
+<div class="note">
+<h3>Live run 2026-09-18, TC-13: diagnostics after an edit (fourth server patch)</h3>
+<p><b>Symptom.</b> After inserting an unterminated CASE, <code>lsp_diagnostics</code> reported 1 diagnostic instead of 6, and 0
+instead of 5 right after the revert.</p>
+<p><b>Cause.</b> The server publishes twice per validation of a source file: the structural pass about 1 s after a change and the
+combined list once its async validators finish, 0.7 to 10 s later depending on load. The tool resolved on the first publish.
+A fixed settle window (tried first, 8 s) was not reliable: while the server is still indexing a freshly opened solution the
+second publish came 8.8 s after the first, and the previous version's structural pass can arrive after the next
+<code>didChange</code>. The server sends no <code>version</code> on <code>publishDiagnostics</code>, so a client cannot tell
+those apart.</p>
+<p><b>Fix.</b> Fourth server patch, <code>docs/server-patches/diagnostics-version.cjs</code>, stamps the three sends with the
+document version. <code>LspClient</code> now ignores publishes for any version but the one it last sent and counts publishes per
+version; <code>lsp_diagnostics</code> expects two for a source file and one for a file under a libsrc path, waits up to 20 s,
+and returns <code>complete: false</code> when only the structural pass has arrived. The fake server publishes in two phases with
+versions (<code>FAKE_ONE_PHASE</code> for the library case). Also from this run: the <code>initialize</code> handshake gets the
+30 s readiness budget (a fresh server on a busy laptop exceeded 15 s), and <code>request()</code> clears its timeout timer.</p>
+</div>
+
 <h2>For the owner</h2>
 <ul>
 <li>All nine tasks are now implemented, tested (fake server for Tasks 1&ndash;8, real Clarion 12 for Task

@@ -18,7 +18,7 @@ export async function connect(env: Record<string, string> = {}, extra: Partial<S
     // Generous relative to the fake server's own work: under vitest's parallel workers this host's
     // cold process-spawn + ESM-import handshake can take several hundred ms (see the Task 4 note in
     // the implementation notes), and running the whole suite concurrently adds CPU contention on top.
-    clientOpts: { readyTimeoutMs: 5000, requestTimeoutMs: 5000, diagnosticsTimeoutMs: 2000, diagnosticsSettleMs: 600 },
+    clientOpts: { readyTimeoutMs: 5000, requestTimeoutMs: 5000, diagnosticsTimeoutMs: 2000 },
     ...extra,
   });
   const server = new McpServer({ name: "test", version: "0" });

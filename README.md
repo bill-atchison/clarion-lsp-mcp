@@ -68,8 +68,12 @@ path in and out is an absolute Windows path.
 | `lsp_debug_status` | Process state, counters, and the last lines of server stderr. |
 
 `lsp_diagnostics` returns `pending: true` when the server has not answered
-within 3 seconds of a changed file, or when nothing is cached yet for an
-unchanged one. Treat that as unknown, not as clean.
+within 20 seconds. Treat that as unknown, not as clean. The server publishes a
+fast structural pass first and the full list once its semantic validators finish;
+`complete: false` means only the first has arrived, so call again for the rest.
+(That distinction needs the `diagnostics-version` server patch in
+`docs/server-patches`; without it stale publishes for a previous edit cannot be
+told apart from fresh ones.)
 
 ## How it works
 
