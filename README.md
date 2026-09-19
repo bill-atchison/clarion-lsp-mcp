@@ -19,24 +19,12 @@ solution.
 
 ## Install
 
-Not yet published to npm. Until it is, build and register the local copy:
+Published on npm as [`clarion-lsp-mcp`](https://www.npmjs.com/package/clarion-lsp-mcp).
+Nothing to clone; the host downloads it through `npx` on first launch.
 
-    git clone https://github.com/bill-atchison/clarion-lsp-mcp
-    cd clarion-lsp-mcp && npm install && npm run build
-    claude mcp add -s user clarion-lsp -- node <full path>\clarion-lsp-mcp\dist\index.js
+Claude Code (`-s user` registers it for every project; omit it for the current one):
 
-Registering the `npx` form below before the package is published makes the
-host report `CONNECTION_CLOSED`, because `npx` cannot download it. To try the
-packed tarball instead (`npm pack` writes `clarion-lsp-mcp-<version>.tgz`):
-
-    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.0.tgz clarion-lsp-mcp
-
-Publishing: `npm login`, then `npm publish --access public`. The
-`prepublishOnly` script runs the typecheck, the tests and the build first.
-
-Claude Code:
-
-    claude mcp add clarion-lsp -- cmd /c npx -y clarion-lsp-mcp
+    claude mcp add -s user clarion-lsp -- cmd /c npx -y clarion-lsp-mcp
 
 Codex CLI (`~/.codex/config.toml`):
 
@@ -50,6 +38,21 @@ Any other host that launches stdio MCP servers from JSON:
 
 `cmd /c` is there because `npx` is a batch file on Windows and some hosts
 cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.0`.
+
+### From source
+
+    git clone https://github.com/bill-atchison/clarion-lsp-mcp
+    cd clarion-lsp-mcp && npm install && npm run build
+    claude mcp add -s user clarion-lsp -- node <full path>\clarion-lsp-mcp\dist\index.js
+
+To try a packed tarball before publishing (`npm pack` writes
+`clarion-lsp-mcp-<version>.tgz`; a bare `npx <tarball path>` runs nothing):
+
+    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.0.tgz clarion-lsp-mcp
+
+Publishing: `npm login`, then `npm publish --access public` from a real
+terminal (two-factor auth opens the browser). `prepublishOnly` runs the
+typecheck, the tests and the build first.
 
 ## Use
 
