@@ -460,7 +460,8 @@ function freshState(){
     // >>> keys here MUST match SIGN_ROLES keys <<<
     signoff: { tester:{name:"",date:"",result:""}, owner:{name:"",date:"",result:""} },
     cases:   cases,
-    resumed: false
+    resumed: false,
+    seedApplied: ""        // label of the recorded run already merged into this browser's saved run
   };
 }
 
@@ -520,17 +521,20 @@ var RUN_SEED = {
     "TC-19": { verdict:"PASS", notes:"Run 3: open_solution ready true, then clarion-assistant:lsp-diagnostics via the Skill tool, IDE closed. Summary line: '**Solution diagnostics**: 14 errors, 109 warnings, 0 info across 866 files (654 files clean, 170 pending)'. Tools called: get_solution_info, lsp_debug_status, get_project_source_files (38 projects, 866 files, 0 unresolved), lsp_diagnostics x866; none unknown; 0 call errors; about 51 minutes. Observation: 170 files pending under the worker's 3 s per-file budget with six subagents on one server; the rebuilt dist waits up to 20 s for the complete publish instead.", evidence:"summary line in required form; 4 tools, none unknown" }
   }
 };
-function seededState(){
-  var s = freshState();
+// Copy the recorded run into a state: header fields and the cases it covers. Cases it does not
+// cover (a manual run's TC-01 to TC-07, for example) are left as they are.
+function applySeed(s){
   if(!RUN_SEED) return s;
-  Object.keys(RUN_SEED.header || {}).forEach(function(k){ if(k in s.header) s.header[k] = RUN_SEED.header[k]; });
+  Object.keys(RUN_SEED.header || {}).forEach(function(k){ if(k in s.header && RUN_SEED.header[k]) s.header[k] = RUN_SEED.header[k]; });
   Object.keys(RUN_SEED.cases || {}).forEach(function(id){
     var src = RUN_SEED.cases[id], dst = s.cases[id]; if(!dst) return;
     dst.verdict = src.verdict || ""; dst.notes = src.notes || ""; dst.evidence = src.evidence || "";
     if(dst.verdict === "PASS") dst.steps = dst.steps.map(function(){ return true; });
   });
+  s.seedApplied = RUN_SEED.label;
   return s;
 }
+function seededState(){ return applySeed(freshState()); }
 function loadRecordedRun(){
   if(!RUN_SEED) return;
   if(!window.confirm("Replace the current run in this browser with the recorded run \"" + RUN_SEED.label + "\"? Print the PDF first if you need the current results.")) return;
@@ -545,7 +549,11 @@ function loadState(){
   var s;
   try { s = JSON.parse(raw); }
   catch(e){ loadError = true; return freshState(); }   // unparseable — don't wipe; show notice
-  return hydrate(s);
+  var st = hydrate(s);
+  // A saved run from before this recorded run was published: merge the recorded results in once
+  // (only the cases it covers), so they show without wiping the manual results for the others.
+  if(RUN_SEED && st.seedApplied !== RUN_SEED.label) applySeed(st);   // saved by the next change or on page hide
+  return st;
 }
 
 // Merge valid values over a fresh skeleton so a drifted/partial save never throws at render.
@@ -577,6 +585,7 @@ function hydrate(s){
       }
     });
   }
+  if(typeof s.seedApplied === "string") fresh.seedApplied = s.seedApplied;
   fresh.resumed = true;
   return fresh;
 }
