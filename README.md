@@ -37,7 +37,7 @@ Any other host that launches stdio MCP servers from JSON:
     { "mcpServers": { "clarion-lsp": { "command": "cmd", "args": ["/c", "npx", "-y", "clarion-lsp-mcp"] } } }
 
 `cmd /c` is there because `npx` is a batch file on Windows and some hosts
-cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.0`.
+cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.2`.
 
 ### From source
 
@@ -48,7 +48,7 @@ cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.0`.
 To try a packed tarball before publishing (`npm pack` writes
 `clarion-lsp-mcp-<version>.tgz`; a bare `npx <tarball path>` runs nothing):
 
-    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.0.tgz clarion-lsp-mcp
+    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.2.tgz clarion-lsp-mcp
 
 Publishing: `npm login`, then `npm publish --access public` from a real
 terminal (two-factor auth opens the browser). `prepublishOnly` runs the
@@ -83,8 +83,10 @@ fast structural pass first and the full list once its semantic validators finish
 It is also `false` while `indexing: true`: right after a solution opens (or the
 server restarts) the server defers its semantic validators or runs them without
 cross-file data, so a file can look clean or carry spurious "not declared"
-warnings until the background index is built and the file is republished.
-`lsp_debug_status` shows the same `indexing` flag.
+warnings until the background index is built. When the server reports the
+index built, files opened before that are sent again so the server validates
+them with its cross-file data; a call made in that window waits for the fresh
+answer. `lsp_debug_status` shows the same `indexing` flag.
 Completeness comes from the server's `clarion/diagnosticsStatus` notification
 (Clarion-Extension 1.0.4 and later). The v1.0.2 snapshot bundled with Clarion
 Assistant does not send it, so there the client counts publishes per document

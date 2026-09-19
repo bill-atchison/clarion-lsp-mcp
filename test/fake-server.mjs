@@ -2,7 +2,9 @@
 // Env: FAKE_PROJECT_DIR (project path), FAKE_REDIR_PATH (findFile answer for redir.inc),
 //      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover),
 //      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics), FAKE_ONE_PHASE=1 (single publish, like a libsrc file),
-//      FAKE_INDEXING=1 (graphStatus never reaches "built").
+//      FAKE_INDEXING=1 (graphStatus never reaches "built"),
+//      FAKE_LATE_GRAPH=<ms> ("built" arrives that long after solutionReady; publishes before it carry a
+//      spurious "not declared" warning, like the real server validating without its file graph).
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 
 const conn = createMessageConnection(
@@ -20,8 +22,11 @@ conn.onNotification("clarion/updatePaths", p => {
   // Like the real server: the background file graph is announced after solutionReady.
   // FAKE_INDEXING=1 never finishes it.
   conn.sendNotification("clarion/graphStatus", { status: "building", fileCount: 1 });
-  if (!process.env.FAKE_INDEXING) conn.sendNotification("clarion/graphStatus", { status: "built", fileCount: 1, edgeCount: 0 });
+  const built = () => { graphBuilt = true; conn.sendNotification("clarion/graphStatus", { status: "built", fileCount: 1, edgeCount: 0 }); };
+  if (process.env.FAKE_LATE_GRAPH) setTimeout(built, Number(process.env.FAKE_LATE_GRAPH));
+  else if (!process.env.FAKE_INDEXING) built();
 });
+let graphBuilt = false;
 // Like the real (patched) server: a structural publish first, the complete list 150 ms later,
 // both stamped with the document version. FAKE_ONE_PHASE=1 publishes only once (a libsrc file).
 // FAKE_STATUS=1 also sends clarion/diagnosticsStatus complete after the last publish (1.0.4+ servers).
@@ -29,6 +34,8 @@ function publish(uri, version, text) {
   if (process.env.FAKE_NO_DIAGNOSTICS) return;
   const diagnostics = text.includes("BAD")
     ? [{ severity: 1, range: r(0, 0, 0, 3), message: "Unknown identifier BAD" }] : [];
+  if (process.env.FAKE_LATE_GRAPH && !graphBuilt)
+    diagnostics.push({ severity: 2, range: r(1, 2, 1, 6), message: "'Exits_OK' is not declared in this file." });
   const last = () => {
     conn.sendNotification("textDocument/publishDiagnostics", { uri, version, diagnostics });
     if (process.env.FAKE_STATUS) conn.sendNotification("clarion/diagnosticsStatus", { uri, version, state: "complete" });

@@ -52,7 +52,8 @@ export class LspClient {
   /** True from open_solution until the server reports its background file graph built
    *  (`clarion/graphStatus` status `built`). Until then the server defers or runs its semantic
    *  validators without cross-file data, so diagnostics can be structural-only or carry spurious
-   *  "not declared" warnings that a later republish corrects. */
+   *  "not declared" warnings; documents open at that point are resent so the server validates
+   *  them again with the graph (see onGraphStatus). */
   indexing = false;
 
   constructor(private spec: SpawnSpec, private opts: ClientOptions = {}) {}
@@ -74,15 +75,19 @@ export class LspClient {
         if (this.stderrTail.length > 50) this.stderrTail.shift();
       }
     });
-    child.on("exit", () => { this._running = false; this.openDocs.clear(); this.conn?.dispose(); });
+    const dead = () => { this._running = false; this.openDocs.clear(); };
+    child.on("exit", () => { dead(); this.conn?.dispose(); });
     const conn = createMessageConnection(
       new StreamMessageReader(child.stdout!), new StreamMessageWriter(child.stdin!));
+    // The pipes close before the child's exit event arrives; a request in that gap must see a dead
+    // server (and be retried on a restarted one) rather than "Connection is closed" as an answer.
+    conn.onClose(dead);
     conn.onNotification((method: string, params: unknown) => {
       this.notificationCount++;
       if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; version?: number; diagnostics: Diagnostic[] });
       if (method === "clarion/diagnosticsStatus") this.onDiagnosticsStatus(params as { uri: string; version: number; state: DiagnosticsStatus });
       if (method === "clarion/solutionReady") this.readyResolve?.(params as { solutionFilePath?: string });
-      if (method === "clarion/graphStatus") this.indexing = (params as { status?: string }).status !== "built";
+      if (method === "clarion/graphStatus") this.onGraphStatus((params as { status?: string }).status);
     });
     conn.onRequest(() => null);            // server-to-client requests we do not implement
     conn.onError(e => this.stderrTail.push(`jsonrpc error: ${String(e[0])}`));
@@ -119,8 +124,9 @@ export class LspClient {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`${method} timed out after ${ms} ms`)), ms);
     });
-    return Promise.race([this.conn.sendRequest(method, params) as Promise<T>, timeout])
-      .finally(() => clearTimeout(timer));
+    // sendRequest throws synchronously on a closed connection; as a rejection the timer is still cleared.
+    const sent = Promise.resolve().then(() => this.conn!.sendRequest(method, params) as Promise<T>);
+    return Promise.race([sent, timeout]).finally(() => clearTimeout(timer));
   }
 
   notify(method: string, params?: unknown): Promise<void> {
@@ -133,19 +139,36 @@ export class LspClient {
     const text = readFileSync(filePath, "utf8");
     const last = this.openDocs.get(uri);
     if (last === text) return { uri, changed: false };
-    this.diagnostics.delete(uri);            // publishes for the previous version are stale from here on
     if (last === undefined) {
+      this.diagnostics.delete(uri);          // publishes for a previous open are stale from here on
       this.versions.set(uri, 1);
       await this.notify("textDocument/didOpen",
         { textDocument: { uri, languageId: "clarion", version: 1, text } });
     } else {
-      const version = (this.versions.get(uri) ?? 1) + 1;
-      this.versions.set(uri, version);
-      await this.notify("textDocument/didChange",
-        { textDocument: { uri, version }, contentChanges: [{ text }] });
+      await this.sendChange(uri, text);
     }
     this.openDocs.set(uri, text);
     return { uri, changed: true };
+  }
+
+  /** Sends the text at a new version; publishes for the previous version are stale from here on. */
+  private sendChange(uri: string, text: string): Promise<void> {
+    this.diagnostics.delete(uri);
+    const version = (this.versions.get(uri) ?? 1) + 1;
+    this.versions.set(uri, version);
+    return this.notify("textDocument/didChange", { textDocument: { uri, version }, contentChanges: [{ text }] });
+  }
+
+  /** Once the graph is built the server revalidates the documents it had open, but it skips any it
+   *  already validated after its index came up and before the graph existed, and its revalidation
+   *  publishes the structural pass first, which the publish count would mistake for a fresh complete
+   *  cycle. Resending every open document at a new version makes the server validate all of them
+   *  with the graph, and the version check drops the publishes of the provisional passes. */
+  private onGraphStatus(status?: string) {
+    this.indexing = status !== "built";
+    if (this.indexing) return;
+    for (const [uri, text] of this.openDocs)
+      void this.sendChange(uri, text).catch(() => { /* server gone; the restart re-opens documents */ });
   }
 
   /** Resolve once the server reports the version last sent complete, or once `publishes` publishes

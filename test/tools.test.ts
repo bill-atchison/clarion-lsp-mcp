@@ -168,6 +168,21 @@ describe("diagnostics and project files", () => {
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
+  it("revalidates documents opened before the graph was built and drops their provisional warnings", async () => {
+    h = await connect({ FAKE_LATE_GRAPH: "700" });   // "built" arrives 700 ms after solutionReady
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
+    await h.call("open_solution", { solution_path: sln });
+    const early = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(early).toMatchObject({ pending: false, complete: false, indexing: true, count: 1 });
+    expect(early.diagnostics[0].message).toMatch(/not declared/);
+    await new Promise(r => setTimeout(r, 900));
+    expect((await h.call("lsp_debug_status")).data.indexing).toBe(false);
+    // Without the resend the cached provisional list (two publishes) would still read complete with count 1.
+    expect((await h.call("lsp_diagnostics", { file_path: file })).data)
+      .toEqual({ pending: false, complete: true, indexing: false, count: 0, diagnostics: [] });
+  });
+
   it("reports pending:true when no diagnostics arrive in time", async () => {
     h = await connect({ FAKE_NO_DIAGNOSTICS: "1" });   // harness sets diagnosticsTimeoutMs to 1000
     const sln = solution();

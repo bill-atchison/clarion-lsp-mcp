@@ -1,17 +1,38 @@
 {
   "name": "clarion-lsp-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server that exposes the Clarion Assistant language server to AI agents with the IDE closed",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/bill-atchison/clarion-lsp-mcp.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bill-atchison/clarion-lsp-mcp.git"
+  },
   "homepage": "https://github.com/bill-atchison/clarion-lsp-mcp#readme",
-  "bugs": { "url": "https://github.com/bill-atchison/clarion-lsp-mcp/issues" },
-  "keywords": ["clarion", "mcp", "lsp", "language-server", "claude-code"],
+  "bugs": {
+    "url": "https://github.com/bill-atchison/clarion-lsp-mcp/issues"
+  },
+  "keywords": [
+    "clarion",
+    "mcp",
+    "lsp",
+    "language-server",
+    "claude-code"
+  ],
   "type": "module",
-  "bin": { "clarion-lsp-mcp": "dist/index.js" },
-  "files": ["dist", "README.md", "LICENSE"],
-  "engines": { "node": ">=20" },
-  "os": ["win32"],
+  "bin": {
+    "clarion-lsp-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
