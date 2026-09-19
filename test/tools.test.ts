@@ -129,11 +129,11 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
     expect((await h.call("lsp_diagnostics", { file_path: file })).data)
-      .toEqual({ pending: false, complete: true, count: 0, diagnostics: [] });
+      .toEqual({ pending: false, complete: true, indexing: false, count: 0, diagnostics: [] });
     expect((await h.call("lsp_diagnostics", { file_path: file })).data.pending).toBe(false);
     writeFileSync(file, "  BAD\n");
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: false, complete: true, count: 1,
+    expect(r).toEqual({ pending: false, complete: true, indexing: false, count: 1,
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
@@ -143,7 +143,7 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
     await h.call("open_solution", { solution_path: sln });
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: false, complete: false, count: 1,
+    expect(r).toEqual({ pending: false, complete: false, indexing: false, count: 1,
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
@@ -153,7 +153,18 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
     await h.call("open_solution", { solution_path: sln });
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: false, complete: true, count: 1,
+    expect(r).toEqual({ pending: false, complete: true, indexing: false, count: 1,
+      diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
+  });
+
+  it("reports complete:false and indexing:true until the server's background graph is built", async () => {
+    h = await connect({ FAKE_INDEXING: "1" });   // graphStatus never reaches "built"
+    const sln = solution();
+    const file = path.join(dir, "main.clw"); writeFileSync(file, "  BAD\n");
+    await h.call("open_solution", { solution_path: sln });
+    expect((await h.call("lsp_debug_status")).data.indexing).toBe(true);
+    const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
+    expect(r).toEqual({ pending: false, complete: false, indexing: true, count: 1,
       diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] });
   });
 
@@ -163,7 +174,7 @@ describe("diagnostics and project files", () => {
     const file = path.join(dir, "main.clw"); writeFileSync(file, "  PROGRAM\n");
     await h.call("open_solution", { solution_path: sln });
     const r = (await h.call("lsp_diagnostics", { file_path: file })).data;
-    expect(r).toEqual({ pending: true, complete: false, count: 0, diagnostics: [] });
+    expect(r).toEqual({ pending: true, complete: false, indexing: false, count: 0, diagnostics: [] });
   });
 
   it("lists absolute .clw/.inc paths per project, resolves redirected files, and reports unresolved ones", async () => {

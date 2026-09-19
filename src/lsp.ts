@@ -49,6 +49,11 @@ export class LspClient {
   readonly diagnostics = new Map<string, DiagnosticState>();
   readonly stderrTail: string[] = [];
   notificationCount = 0;
+  /** True from open_solution until the server reports its background file graph built
+   *  (`clarion/graphStatus` status `built`). Until then the server defers or runs its semantic
+   *  validators without cross-file data, so diagnostics can be structural-only or carry spurious
+   *  "not declared" warnings that a later republish corrects. */
+  indexing = false;
 
   constructor(private spec: SpawnSpec, private opts: ClientOptions = {}) {}
 
@@ -77,6 +82,7 @@ export class LspClient {
       if (method === "textDocument/publishDiagnostics") this.onDiagnostics(params as { uri: string; version?: number; diagnostics: Diagnostic[] });
       if (method === "clarion/diagnosticsStatus") this.onDiagnosticsStatus(params as { uri: string; version: number; state: DiagnosticsStatus });
       if (method === "clarion/solutionReady") this.readyResolve?.(params as { solutionFilePath?: string });
+      if (method === "clarion/graphStatus") this.indexing = (params as { status?: string }).status !== "built";
     });
     conn.onRequest(() => null);            // server-to-client requests we do not implement
     conn.onError(e => this.stderrTail.push(`jsonrpc error: ${String(e[0])}`));
@@ -94,6 +100,7 @@ export class LspClient {
     const ready = new Promise<boolean>(r => {
       this.readyResolve = p => { if ((p?.solutionFilePath ?? "").toLowerCase() === want) r(true); };
     });
+    this.indexing = true;                    // cleared by clarion/graphStatus "built"
     await this.notify("clarion/updatePaths", params);
     return Promise.race([ready, sleep(this.opts.readyTimeoutMs ?? READY_TIMEOUT_MS).then(() => false)]);
   }

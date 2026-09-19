@@ -1,6 +1,6 @@
 {
   "name": "clarion-lsp-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that exposes the Clarion Assistant language server to AI agents with the IDE closed",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/bill-atchison/clarion-lsp-mcp.git" },

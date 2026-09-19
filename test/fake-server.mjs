@@ -1,7 +1,8 @@
 // Minimal stand-in for the Clarion language server. Speaks LSP over stdio.
 // Env: FAKE_PROJECT_DIR (project path), FAKE_REDIR_PATH (findFile answer for redir.inc),
 //      FAKE_SLOW=1 (never send solutionReady), FAKE_CRASH_ON_HOVER=1 (exit(3) on hover),
-//      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics), FAKE_ONE_PHASE=1 (single publish, like a libsrc file).
+//      FAKE_NO_DIAGNOSTICS=1 (never publish diagnostics), FAKE_ONE_PHASE=1 (single publish, like a libsrc file),
+//      FAKE_INDEXING=1 (graphStatus never reaches "built").
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
 
 const conn = createMessageConnection(
@@ -16,6 +17,10 @@ conn.onNotification("clarion/updatePaths", p => {
   if (process.env.FAKE_SLOW) return;
   conn.sendNotification("clarion/solutionReady",
     { solutionFilePath: p.solutionFilePath, projectCount: 1 });
+  // Like the real server: the background file graph is announced after solutionReady.
+  // FAKE_INDEXING=1 never finishes it.
+  conn.sendNotification("clarion/graphStatus", { status: "building", fileCount: 1 });
+  if (!process.env.FAKE_INDEXING) conn.sendNotification("clarion/graphStatus", { status: "built", fileCount: 1, edgeCount: 0 });
 });
 // Like the real (patched) server: a structural publish first, the complete list 150 ms later,
 // both stamped with the document version. FAKE_ONE_PHASE=1 publishes only once (a libsrc file).

@@ -177,7 +177,7 @@ export function registerTools(server: McpServer, s: Session): void {
       "cached diagnostics, and the last server stderr lines.",
   }, async () => ok({
     running: s.client?.running ?? false, pid: s.client?.pid ?? null, solution: s.solution ?? null,
-    ready: s.ready, notifications: s.client?.notificationCount ?? 0,
+    ready: s.ready, indexing: s.client?.indexing ?? false, notifications: s.client?.notificationCount ?? 0,
     openDocuments: s.client?.openDocumentCount ?? 0, diagnosticsCached: s.client?.diagnostics.size ?? 0,
     stderrTail: s.client ? [...s.client.stderrTail] : [],
   }));
@@ -236,7 +236,8 @@ export function registerTools(server: McpServer, s: Session): void {
   server.registerTool("lsp_diagnostics", {
     description: "Current errors and warnings for a file. pending:true means the server has not answered " +
       "within 20 seconds; treat that as unknown, not clean. complete:false means only the server's fast " +
-      "structural pass has arrived and semantic warnings may follow; call again for the rest.",
+      "structural pass has arrived, or the server is still building its background index (indexing:true) " +
+      "so semantic warnings may be missing or spurious; call again later for the final list.",
     inputSchema: { file_path: z.string() },
   }, async a => guard(async () => withClient(s, async c => {
     const file = checkFile(s, a.file_path);
@@ -246,10 +247,13 @@ export function registerTools(server: McpServer, s: Session): void {
     // publish as final made a freshly opened or edited file look clean.
     const expected = isLibsrcFile(s, file) ? 1 : 2;
     const state = await c.waitForDiagnostics(uri, expected);
-    if (state === undefined) return { pending: true, complete: false, count: 0, diagnostics: [] };
+    // While the background index builds, the server defers its semantic validators or runs them
+    // without cross-file data, and republishes once it is done; the answer is provisional.
+    const indexing = c.indexing;
+    if (state === undefined) return { pending: true, complete: false, indexing, count: 0, diagnostics: [] };
     const diagnostics = state.diagnostics.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
       character: d.range.start.character, message: d.message }));
-    return { pending: false, complete: isComplete(state, expected), count: diagnostics.length, diagnostics };
+    return { pending: false, complete: isComplete(state, expected) && !indexing, indexing, count: diagnostics.length, diagnostics };
   }))());
 
   server.registerTool("get_project_source_files", {
