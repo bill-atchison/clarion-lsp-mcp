@@ -142,7 +142,7 @@ Revert: restore `providers\ClarionDocumentSymbolProvider.js.orig` and `providers
 
 ## diagnostics-version
 
-**Upstream issue:** not filed. Clarion-Extension 1.0.4 solved the same problem another way:
+**Upstream issue:** https://github.com/msarson/Clarion-Extension/issues/619 (filed 2026-09-19, the `version` field on `publishDiagnostics` only, edits a-c). The completeness half needs no issue: Clarion-Extension 1.0.4 solved it another way:
 `clarion/diagnosticsStatus` (upstream #460) carries the document version and a `complete`,
 `deferred` or `superseded` state, and the MCP consumes it when present. Verified against a
 v1.0.5 build compiled from source: `publishDiagnostics` still has no `version`, and the status
