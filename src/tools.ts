@@ -5,7 +5,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { findClarionRoot, findSolution, buildPaths,
          type ClarionRoot, type UpdatePathsParams } from "./clarion.js";
-import { LspClient, toUri, fromUri, isComplete, type SpawnSpec, type ClientOptions, type Range } from "./lsp.js";
+import { LspClient, toUri, fromUri, isComplete, DIAGNOSTICS_TIMEOUT_MS,
+         type SpawnSpec, type ClientOptions, type Range, type Diagnostic } from "./lsp.js";
 
 export interface SessionOptions {
   cwd: string;
@@ -20,6 +21,7 @@ export interface Session {
   params?: UpdatePathsParams;
   ready: boolean;
   client?: LspClient;
+  sweep?: Sweep;
 }
 
 export function createSession(overrides: Partial<SessionOptions> = {}): Session {
@@ -119,6 +121,10 @@ function hoverText(h: { contents: unknown } | null): string {
   const one = (x: string | { value: string }) => (typeof x === "string" ? x : x.value);
   return Array.isArray(c) ? c.map(one).join("\n") : one(c);
 }
+
+type Diag = { severity: number; line: number; character: number; message: string };
+const toDiag = (d: Diagnostic): Diag => ({ severity: d.severity ?? 1, line: d.range.start.line,
+  character: d.range.start.character, message: d.message });
 
 /** Validates the path exists, then opens it on the (already-live) client. */
 function openChecked(s: Session, c: LspClient, file_path: string) {
@@ -251,30 +257,104 @@ export function registerTools(server: McpServer, s: Session): void {
     // without cross-file data, and republishes once it is done; the answer is provisional.
     const indexing = c.indexing;
     if (state === undefined) return { pending: true, complete: false, indexing, count: 0, diagnostics: [] };
-    const diagnostics = state.diagnostics.map(d => ({ severity: d.severity ?? 1, line: d.range.start.line,
-      character: d.range.start.character, message: d.message }));
+    const diagnostics = state.diagnostics.map(toDiag);
     return { pending: false, complete: isComplete(state, expected, c.statusCapable) && !indexing, indexing, count: diagnostics.length, diagnostics };
   }))());
 
   server.registerTool("get_project_source_files", {
     description: "All .clw and .inc files in the open solution, absolute paths grouped by project.",
-  }, async () => guard(async () => withClient(s, async c => {
-    type Project = { name: string; path: string; guid: string };
-    type ProjFile = { name: string; relativePath: string };
-    const tree = await c.request<{ projects: Project[] }>("clarion/getSolutionTree");
-    const out = [];
-    for (const p of tree.projects) {
-      const { files } = await c.request<{ files: ProjFile[] }>("clarion/getProjectFiles", { projectGuid: p.guid });
-      const resolved: string[] = [], unresolved: string[] = [];
-      for (const f of files) {
-        if (!/\.(clw|inc)$/i.test(f.name)) continue;
-        const direct = path.join(p.path, f.relativePath);
-        if (existsSync(direct)) { resolved.push(direct); continue; }
-        const hit = await c.request<{ path?: string } | null>("clarion/findFile", { filename: f.name });
-        if (hit?.path && existsSync(hit.path)) resolved.push(hit.path); else unresolved.push(f.name);
-      }
-      out.push({ project: p.name, files: resolved, unresolved });
+  }, async () => guard(async () => withClient(s, listSourceFiles))());
+
+  server.registerTool("lsp_solution_diagnostics", {
+    description: "Errors and warnings for every .clw and .inc file in the open solution, collected inside the " +
+      "MCP process (no per-file calls to copy). The first call starts a background sweep and returns at once " +
+      "with status:\"running\"; call again every 30 seconds or so until status:\"done\". files lists only " +
+      "the files with diagnostics; unknown lists files that gave no complete answer within 60 seconds (treat " +
+      "as unknown, not clean). The finished report is kept until a call with restart:true.",
+    inputSchema: { restart: z.boolean().optional() },
+  }, async a => guard(async () => {
+    if (a.restart && s.sweep?.status === "done") s.sweep = undefined;
+    if (!s.sweep) {
+      // The file list is quick and gives the first answer its total; the sweep itself runs on.
+      const { client, projects } = await withClient(s, async c => ({ client: c, projects: await listSourceFiles(c) }));
+      // A file shared by several projects is validated once.
+      const files = [...new Map(projects.flatMap(p => p.files).map(f => [f.toLowerCase(), f])).values()];
+      const sweep: Sweep = { status: "running", startedAt: new Date().toISOString(), total: files.length, done: 0,
+        errors: 0, warnings: 0, info: 0, unknown: [], unresolved: projects.flatMap(p => p.unresolved), files: [] };
+      s.sweep = sweep;
+      void runSweep(s, client, files, sweep);
     }
-    return out;
-  }))());
+    return s.sweep;
+  })());
+}
+
+type ProjectFiles = { project: string; files: string[]; unresolved: string[] };
+async function listSourceFiles(c: LspClient): Promise<ProjectFiles[]> {
+  type Project = { name: string; path: string; guid: string };
+  type ProjFile = { name: string; relativePath: string };
+  const tree = await c.request<{ projects: Project[] }>("clarion/getSolutionTree");
+  const out: ProjectFiles[] = [];
+  for (const p of tree.projects) {
+    const { files } = await c.request<{ files: ProjFile[] }>("clarion/getProjectFiles", { projectGuid: p.guid });
+    const resolved: string[] = [], unresolved: string[] = [];
+    for (const f of files) {
+      if (!/\.(clw|inc)$/i.test(f.name)) continue;
+      const direct = path.join(p.path, f.relativePath);
+      if (existsSync(direct)) { resolved.push(direct); continue; }
+      const hit = await c.request<{ path?: string } | null>("clarion/findFile", { filename: f.name });
+      if (hit?.path && existsSync(hit.path)) resolved.push(hit.path); else unresolved.push(f.name);
+    }
+    out.push({ project: p.name, files: resolved, unresolved });
+  }
+  return out;
+}
+
+interface Sweep {
+  status: "running" | "done"; startedAt: string; finishedAt?: string; error?: string;
+  total: number; done: number; errors: number; warnings: number; info: number;
+  unknown: string[]; unresolved: string[];
+  files: Array<{ file_path: string; count: number; diagnostics: Diag[] }>;
+}
+// ponytail: fixed concurrency; the server is single-threaded, so more in flight only expires waits.
+const SWEEP_CONCURRENCY = 4;
+
+/** Runs in the background; the tool returns the same object while it fills in. */
+async function runSweep(s: Session, c: LspClient, files: string[], sweep: Sweep): Promise<void> {
+  try {
+    // Answers given while the background graph builds are provisional; wait for it (bounded).
+    for (let i = 0; c.indexing && c.running && i < 180; i++) await new Promise(r => setTimeout(r, 1000));
+    const waitMs = (s.opts.clientOpts.diagnosticsTimeoutMs ?? DIAGNOSTICS_TIMEOUT_MS) * 3;
+    let next = 0;
+    const worker = async () => {
+      while (next < files.length) {
+        const file = files[next++];
+        if (c.running) await sweepFile(s, c, file, waitMs, sweep); else sweep.unknown.push(file);
+        sweep.done++;
+      }
+    };
+    await Promise.all(Array.from({ length: SWEEP_CONCURRENCY }, worker));
+    if (!c.running) sweep.error = "Language server stopped during the sweep; the next tool call restarts it.";
+  } catch (e) {
+    sweep.error = msg(e);
+  }
+  sweep.status = "done";
+  sweep.finishedAt = new Date().toISOString();
+}
+
+async function sweepFile(s: Session, c: LspClient, file: string, waitMs: number, sweep: Sweep): Promise<void> {
+  try {
+    const { uri } = await c.openDocument(file);
+    const expected = isLibsrcFile(s, file) ? 1 : 2;
+    const state = await c.waitForDiagnostics(uri, expected, waitMs);
+    const complete = state !== undefined && isComplete(state, expected, c.statusCapable) && !c.indexing;
+    await c.closeDocument(uri);
+    if (!complete) { sweep.unknown.push(file); return; }
+    const diagnostics = state.diagnostics.map(toDiag);
+    for (const d of diagnostics) {
+      if (d.severity === 1) sweep.errors++; else if (d.severity === 2) sweep.warnings++; else sweep.info++;
+    }
+    if (diagnostics.length) sweep.files.push({ file_path: file, count: diagnostics.length, diagnostics });
+  } catch {
+    sweep.unknown.push(file);     // server gone or file unreadable: unknown, never clean
+  }
 }

@@ -151,14 +151,24 @@ export class LspClient {
     if (last === text) return { uri, changed: false };
     if (last === undefined) {
       this.diagnostics.delete(uri);          // publishes for a previous open are stale from here on
-      this.versions.set(uri, 1);
+      // Higher than any version sent before: the server remembers the last version it validated
+      // even after didClose, and skips a reopen at the same number.
+      const version = (this.versions.get(uri) ?? 0) + 1;
+      this.versions.set(uri, version);
       await this.notify("textDocument/didOpen",
-        { textDocument: { uri, languageId: "clarion", version: 1, text } });
+        { textDocument: { uri, languageId: "clarion", version, text } });
     } else {
       await this.sendChange(uri, text);
     }
     this.openDocs.set(uri, text);
     return { uri, changed: true };
+  }
+
+  /** Closes a document opened by openDocument; a no-op for anything else. */
+  async closeDocument(uri: string): Promise<void> {
+    if (!this.openDocs.delete(uri)) return;
+    this.diagnostics.delete(uri);
+    await this.notify("textDocument/didClose", { textDocument: { uri } });
   }
 
   /** Sends the text at a new version; publishes for the previous version are stale from here on. */

@@ -65,10 +65,10 @@
   <p class="eyebrow">Guide &middot; Clarion LSP MCP</p>
   <h1>Clarion LSP MCP User Guide</h1>
   <p class="sub">Install, register, and diagnose the server that lets an AI assistant read a Clarion solution with the IDE closed.</p>
-  <p class="meta">Applies to version 0.1.3 &middot; Windows workstations with Clarion 11.1 or 12 and the Clarion Assistant addin</p>
+  <p class="meta">Applies to version 0.1.4 &middot; Windows workstations with Clarion 11.1 or 12 and the Clarion Assistant addin</p>
 </header>
 <main id="top">
-  <div class="crumbs"><a href="#">0.1.3</a><span class="sep">&rsaquo;</span><a href="#">User Guides</a><span class="sep">&rsaquo;</span><b>Clarion LSP MCP</b></div>
+  <div class="crumbs"><a href="#">0.1.4</a><span class="sep">&rsaquo;</span><a href="#">User Guides</a><span class="sep">&rsaquo;</span><b>Clarion LSP MCP</b></div>
   <h2>At a glance</h2>
   <div class="card-grid">
     <div class="card">
@@ -86,7 +86,7 @@
   </div>
   <p>
     <span class="chip">Feature: Clarion LSP MCP</span>
-    <span class="chip">Version: 0.1.3</span>
+    <span class="chip">Version: 0.1.4</span>
     <span class="chip">Repo: github.com/bill-atchison/clarion-lsp-mcp</span>
   </p>
   <div class="toc">
@@ -102,7 +102,7 @@
   </div>
 
   <h2 id="overview">Overview</h2>
-  <p class="lead">The Clarion Assistant IDE addin ships a full Clarion language server inside the Clarion install folder, but only the running IDE could use it. Clarion LSP MCP is a small program, published on npm as <code>clarion-lsp-mcp</code>, that starts that same language server on its own, points it at a solution, and exposes twelve tools to whatever AI assistant is registered to use it. Nothing is copied or redistributed: the server runs from the existing Clarion install.</p>
+  <p class="lead">The Clarion Assistant IDE addin ships a full Clarion language server inside the Clarion install folder, but only the running IDE could use it. Clarion LSP MCP is a small program, published on npm as <code>clarion-lsp-mcp</code>, that starts that same language server on its own, points it at a solution, and exposes thirteen tools to whatever AI assistant is registered to use it. Nothing is copied or redistributed: the server runs from the existing Clarion install.</p>
   <p>When the developer's AI tool starts, it launches <code>clarion-lsp-mcp</code> as a background process. Nothing else happens until the assistant calls <code>open_solution</code>. At that point the program finds the Clarion install, starts the language server from it, tells the server which <code>.sln</code> to index, and waits up to 30 seconds for the server to report ready. After that, every question the assistant asks (where is this procedure defined, does this file have errors) is forwarded to the server and the answer is returned as plain file paths and line numbers.</p>
   <div class="callout note"><b>Note</b> This guide covers installing, registering, and diagnosing the server. It does not cover the Clarion IDE, the Clarion Assistant addin itself, or the AI tools' own installation. The server is read-only: it never edits source files, project files, or <code>.app</code> files, and it never builds or generates code. The one tool that proposes changes, <code>lsp_rename</code>, returns a list of edits for the developer to review and never applies them.</div>
 
@@ -126,7 +126,7 @@
 
   <h2 id="procedures">Procedures</h2>
 
-  <div class="callout note"><b>Note</b> The package is published on npm as <code>clarion-lsp-mcp</code> (version 0.1.3, 2026-09-19), so the <code>npx</code> commands below download it on first launch; nothing is cloned or built on the workstation. To run from source instead (for development, or to test an unpublished change), clone the repository, run <code>npm install</code> and <code>npm run build</code>, and register <code>node &lt;path&gt;\clarion-lsp-mcp\dist\index.js</code> in place of the <code>npx</code> command.</div>
+  <div class="callout note"><b>Note</b> The package is published on npm as <code>clarion-lsp-mcp</code> (version 0.1.4, 2026-09-19), so the <code>npx</code> commands below download it on first launch; nothing is cloned or built on the workstation. To run from source instead (for development, or to test an unpublished change), clone the repository, run <code>npm install</code> and <code>npm run build</code>, and register <code>node &lt;path&gt;\clarion-lsp-mcp\dist\index.js</code> in place of the <code>npx</code> command.</div>
   <h3>Install and register with Claude Code</h3>
   <ol class="steps">
     <li>Confirm Node.js 20 or newer: open a command prompt and run <code>node --version</code>. If it is missing or older, install the current LTS from nodejs.org and reopen the prompt.</li>
@@ -168,7 +168,7 @@ args = ["/c", "npx", "-y", "clarion-lsp-mcp"]</code></pre></li>
 
   <h3>Update or remove</h3>
   <ol class="steps">
-    <li>Update: nothing to do when registered through <code>npx -y</code>; npx checks for the latest published version at each start. To pin a version, register <code>npx -y clarion-lsp-mcp@0.1.3</code> instead.</li>
+    <li>Update: nothing to do when registered through <code>npx -y</code>; npx checks for the latest published version at each start. To pin a version, register <code>npx -y clarion-lsp-mcp@0.1.4</code> instead.</li>
     <li>Remove from Claude Code: <code>claude mcp remove clarion-lsp</code>. For other hosts, delete the entry from their configuration file.</li>
     <li>The Clarion install and the addin are untouched by install or removal. No files are written anywhere except npm's cache.</li>
   </ol>
@@ -187,6 +187,7 @@ args = ["/c", "npx", "-y", "clarion-lsp-mcp"]</code></pre></li>
       <tr><td><code>lsp_definition</code>, <code>lsp_references</code>, <code>lsp_hover</code></td><td>Answers a question about the symbol at a file position.</td><td>A list of file path, line, character; or hover text.</td></tr>
       <tr><td><code>lsp_document_symbols</code>, <code>lsp_find_symbol</code></td><td>Lists symbols in one file, or searches by name across the solution.</td><td>Names with kinds and positions.</td></tr>
       <tr><td><code>lsp_diagnostics</code></td><td>Errors and warnings for one file, re-reading it from disk first so recent edits count.</td><td><code>pending: false</code>, <code>complete: true</code> and a count. <code>pending: true</code> means no answer within 20 seconds; treat it as unknown, not clean. <code>complete: false</code> means only the server's fast structural pass has arrived and semantic warnings may follow; ask again. <code>indexing: true</code> (also shown by <code>lsp_debug_status</code>) means the server is still building its background index after the solution opened or the server restarted; until it finishes, semantic warnings can be missing or spurious, so <code>complete</code> stays <code>false</code> and the call should be repeated later; once the index is built, files opened before that point are validated again and a call in that window waits for the fresh answer. Completion is read from the server's own per-version status signal (Clarion-Extension 1.0.4 or later); the v1.0.2 server bundled with the addin has no such signal, so there the <code>diagnostics-version</code> patch in <code>docs\server-patches</code>, which adds it, is needed for the flag to be reliable.</td></tr>
+      <tr><td><code>lsp_solution_diagnostics</code></td><td>Errors and warnings for every <code>.clw</code> and <code>.inc</code> in the solution, collected inside the MCP so the assistant does not call <code>lsp_diagnostics</code> hundreds of times and copy the answers. The first call starts a background sweep; later calls report progress and, when finished, the result.</td><td><code>status: "running"</code> with <code>total</code> and a rising <code>done</code>, then <code>status: "done"</code> with <code>errors</code>, <code>warnings</code>, <code>info</code>, <code>files</code> (only files with diagnostics), <code>unknown</code> (no complete answer within 60 seconds; treat as unknown, not clean) and <code>unresolved</code>. About ten to fifteen minutes for 850 files. The report is kept until a call with <code>restart: true</code>.</td></tr>
       <tr><td><code>lsp_rename</code></td><td>Proposes a rename. Never writes to disk.</td><td>An <code>edits</code> list, or an <code>error</code> saying the symbol cannot be renamed there.</td></tr>
       <tr><td><code>lsp_debug_status</code></td><td>Health check.</td><td><code>running: true</code>, a <code>pid</code>, counts of notifications and open documents, and the last lines the server wrote to its error output.</td></tr>
     </tbody>
@@ -227,7 +228,7 @@ args = ["/c", "npx", "-y", "clarion-lsp-mcp"]</code></pre></li>
   </ul>
   <p><a class="btn" href="#top">Back to top</a></p>
 </main>
-<footer>Clarion LSP MCP documentation &middot; version 0.1.3 &middot; github.com/bill-atchison/clarion-lsp-mcp</footer>
+<footer>Clarion LSP MCP documentation &middot; version 0.1.4 &middot; github.com/bill-atchison/clarion-lsp-mcp</footer>
 </div>
 </body>
 </html>

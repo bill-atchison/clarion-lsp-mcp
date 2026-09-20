@@ -259,7 +259,7 @@ var CASES = [
       "Run:   claude   (starts an interactive session; every later Say to Claude step is typed here).",
       "Type:   /mcp   then select the clarion-lsp entry and choose View tools."
     ],
-    expected:"The clarion-lsp server shows as connected and lists twelve tools: open_solution, lsp_start, get_solution_info, lsp_debug_status, lsp_definition, lsp_references, lsp_hover, lsp_document_symbols, lsp_find_symbol, lsp_rename, lsp_diagnostics, get_project_source_files. If the server shows as failed, record FAIL and copy the error text shown into Notes." },
+    expected:"The clarion-lsp server shows as connected and lists thirteen tools: open_solution, lsp_start, get_solution_info, lsp_debug_status, lsp_definition, lsp_references, lsp_hover, lsp_document_symbols, lsp_find_symbol, lsp_rename, lsp_diagnostics, lsp_solution_diagnostics, get_project_source_files (twelve, without lsp_solution_diagnostics, on 0.1.3 and earlier). If the server shows as failed, record FAIL and copy the error text shown into Notes." },
 
   { id:"TC-04", section:"open", priority:"CORE",
     title:"Open the solution and reach ready",
@@ -432,7 +432,18 @@ var CASES = [
       "Run:   claude mcp list",
       "Open Task Manager, Details tab, right-click a column header, choose Select columns, tick Command line, and confirm no node.exe whose command line contains lsp-server remains."
     ],
-    expected:"claude mcp list no longer shows clarion-lsp, and no leftover language server process is running. The Clarion install folder is unchanged. If a node.exe from lsp-server is still running, record FAIL and end it manually." }
+    expected:"claude mcp list no longer shows clarion-lsp, and no leftover language server process is running. The Clarion install folder is unchanged. If a node.exe from lsp-server is still running, record FAIL and end it manually." },
+
+  { id:"TC-21", section:"diag", priority:"HIGH",
+    title:"Solution-wide diagnostics in one tool (lsp_solution_diagnostics)",
+    pre:"TC-12 completed (count for the test file written down). Solution open, lsp_debug_status shows indexing: false.",
+    steps:[
+      "Say to Claude:   Call lsp_solution_diagnostics and show me the raw JSON result.   Write down status, total and done.",
+      "Wait about a minute, then say to Claude:   Call lsp_solution_diagnostics again and show me status, done, total, errors, warnings and the length of unknown.   Repeat until status is done (a few minutes on a large solution; done rises each time).",
+      "Say to Claude:   From the last result, show me the entry in files whose file_path is \"<full path of the .clw>\", the length of files, and the full unknown list.",
+      "Say to Claude:   Call lsp_debug_status and show me openDocuments."
+    ],
+    expected:"The first call returns at once with status: running and total equal to the number of unique files from TC-06. Later calls show done rising until status: done; the finished result carries errors, warnings and info counts, files (only files with diagnostics, each with file_path, count and the same diagnostics shape as lsp_diagnostics), unknown and unresolved. The test file's entry has the same count and lines as TC-12 (or is absent from files if that count was 0). unknown is empty, or lists only files that lsp_diagnostics also reports as pending. openDocuments afterwards is not larger than before the sweep (the sweep closes what it opens). If status never reaches done, or a file appears in files with fewer diagnostics than lsp_diagnostics returns for it, record FAIL." }
 ];
 
 // Run-header fields (key, label). KEEP keys in sync with freshState().header below.

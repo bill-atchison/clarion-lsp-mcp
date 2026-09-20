@@ -215,6 +215,58 @@ describe("diagnostics and project files", () => {
   });
 });
 
+describe("solution sweep", () => {
+  const poll = async (call: (n: string, a?: Record<string, unknown>) => Promise<{ data: { status: string } }>) => {
+    for (let i = 0; i < 100; i++) {
+      const r = (await call("lsp_solution_diagnostics")).data;
+      if (r.status === "done") return r;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    throw new Error("sweep did not finish");
+  };
+
+  it("sweeps every source file in the background, lists only files with diagnostics, and closes them", async () => {
+    const sln = solution();
+    writeFileSync(path.join(dir, "main.clw"), "  BAD\n");
+    const redirDir = mkdtempSync(path.join(tmpdir(), "redir-"));
+    const redir = path.join(redirDir, "redir.inc"); writeFileSync(redir, "");
+    h = await connect({ FAKE_PROJECT_DIR: dir, FAKE_REDIR_PATH: redir });
+    await h.call("open_solution", { solution_path: sln });
+    const first = (await h.call("lsp_solution_diagnostics")).data;
+    expect(first).toMatchObject({ status: "running", total: 2, unresolved: ["ghost.inc"] });
+    const r = await poll(h.call);
+    expect(r).toMatchObject({ status: "done", total: 2, done: 2, errors: 1, warnings: 0, info: 0, unknown: [], unresolved: ["ghost.inc"],
+      files: [{ file_path: path.join(dir, "main.clw"), count: 1,
+                diagnostics: [{ severity: 1, line: 0, character: 0, message: "Unknown identifier BAD" }] }] });
+    expect((await h.call("lsp_debug_status")).data.openDocuments).toBe(0);
+    // The finished report is kept; restart:true starts a new sweep.
+    expect((await h.call("lsp_solution_diagnostics")).data.finishedAt).toBe(r.finishedAt);
+    expect((await h.call("lsp_solution_diagnostics", { restart: true })).data.status).toBe("running");
+    expect((await poll(h.call)).finishedAt).not.toBe(r.finishedAt);
+    // A file the sweep closed still validates when asked for on its own (reopen at a higher version).
+    const again = (await h.call("lsp_diagnostics", { file_path: path.join(dir, "main.clw") })).data;
+    expect(again).toMatchObject({ pending: false, complete: true, count: 1 });
+    rmSync(redirDir, { recursive: true, force: true });
+  });
+
+  it("reports files without a complete answer as unknown, never as clean", async () => {
+    const sln = solution();
+    writeFileSync(path.join(dir, "main.clw"), "  PROGRAM\n");
+    h = await connect({ FAKE_PROJECT_DIR: dir, FAKE_NO_DIAGNOSTICS: "1" });
+    await h.call("open_solution", { solution_path: sln });
+    await h.call("lsp_solution_diagnostics");
+    const r = await poll(h.call);
+    expect(r).toMatchObject({ status: "done", total: 1, done: 1, errors: 0, files: [], unknown: [path.join(dir, "main.clw")] });
+  });
+
+  it("refuses before a solution is open", async () => {
+    h = await connect();
+    const r = await h.call("lsp_solution_diagnostics");
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toBe("No solution open. Call open_solution first.");
+  });
+});
+
 describe("crash recovery", () => {
   it("restarts the server after a crash and retries once, surfacing stderr on a second failure", async () => {
     h = await connect();

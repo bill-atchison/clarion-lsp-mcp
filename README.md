@@ -37,7 +37,7 @@ Any other host that launches stdio MCP servers from JSON:
     { "mcpServers": { "clarion-lsp": { "command": "cmd", "args": ["/c", "npx", "-y", "clarion-lsp-mcp"] } } }
 
 `cmd /c` is there because `npx` is a batch file on Windows and some hosts
-cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.3`.
+cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.4`.
 
 ### From source
 
@@ -48,7 +48,7 @@ cannot launch it directly. To pin a version, use `clarion-lsp-mcp@0.1.3`.
 To try a packed tarball before publishing (`npm pack` writes
 `clarion-lsp-mcp-<version>.tgz`; a bare `npx <tarball path>` runs nothing):
 
-    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.3.tgz clarion-lsp-mcp
+    claude mcp add clarion-lsp -- cmd /c npx -y --package <full path>\clarion-lsp-mcp-0.1.4.tgz clarion-lsp-mcp
 
 Publishing: `npm login`, then `npm publish --access public` from a real
 terminal (two-factor auth opens the browser). `prepublishOnly` runs the
@@ -74,6 +74,7 @@ path in and out is an absolute Windows path.
 | `lsp_find_symbol` | Search symbols by name across the solution. |
 | `lsp_diagnostics` | Errors and warnings for a file. Re-reads the file from disk first, so edits made by the agent's own tools are seen. |
 | `lsp_rename` | Proposes a rename and returns the edit list. Never applies it. |
+| `lsp_solution_diagnostics` | Errors and warnings for every file in the solution, collected in the background inside the MCP. Call once to start, again to poll until `status: "done"`. |
 | `lsp_debug_status` | Process state, counters, and the last lines of server stderr. |
 
 `lsp_diagnostics` returns `pending: true` when the server has not answered
@@ -87,6 +88,15 @@ warnings until the background index is built. When the server reports the
 index built, files opened before that are sent again so the server validates
 them with its cross-file data; a call made in that window waits for the fresh
 answer. `lsp_debug_status` shows the same `indexing` flag.
+`lsp_solution_diagnostics` does the same for the whole solution without a tool
+call per file: the first call starts a sweep in the background (four files at a
+time, each waited on for up to 60 seconds, then closed) and returns
+`status: "running"` with `total` and `done`; later calls return the progress and
+finally the report: `errors`, `warnings`, `info`, `files` (only files with
+diagnostics, same entry shape as `lsp_diagnostics`), `unknown` (no complete
+answer in time; treat as unknown, not clean) and `unresolved`. The finished
+report is kept until a call with `restart: true`. An 858-file solution takes
+about ten to fifteen minutes.
 Completeness comes from the server's `clarion/diagnosticsStatus` notification
 (Clarion-Extension 1.0.4 and later; the client checks the server's main file
 for it at start). The v1.0.2 snapshot bundled with Clarion Assistant does not
@@ -133,7 +143,7 @@ the first `.red` in `<ClarionRoot>\bin`.
 ## Development
 
     npm install
-    npm test          # 37 tests against a fake language server, plus 5 against real Clarion if installed
+    npm test          # 40 tests against a fake language server, plus 5 against real Clarion if installed
     npm run build     # dist/
 
 The integration suite skips itself when no Clarion install is found, so CI on
