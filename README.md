@@ -133,12 +133,16 @@ the first `.red` in `<ClarionRoot>\bin`.
 ## Development
 
     npm install
-    npm test          # 31 tests against a fake server, plus 5 against real Clarion if installed
+    npm test          # 37 tests against a fake language server, plus 5 against real Clarion if installed
     npm run build     # dist/
 
 The integration suite skips itself when no Clarion install is found, so CI on
 machines without Clarion stays green. Design spec, implementation plan, and
-implementation notes are under `docs/mySuperpower/`.
+implementation notes are under `docs/mySuperpower/`; the unit test cases and
+the recorded live runs against a real solution are under `docs/Testing/`
+(`ClarionLspMcp-Unit-Test-Cases.html`, `live-run-*.md`). Patches for the
+bundled language server, each with the upstream issue it tracks, are under
+`docs/server-patches/`.
 
 ## License
 
