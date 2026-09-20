@@ -110,8 +110,11 @@ Revert: restore `providers\ReferencesProvider.js.orig` and `services\ReferenceCo
 
 **Upstream issue:** https://github.com/msarson/Clarion-Extension/issues/604 (filed 2026-09-18 against
 tag `v1.0.5`, where cause 1 still reproduces: 158 giant names, 9.2 MB; the patch applied to a v1.0.5
-build gives 1374 symbols, 0 giants, 0.4 MB). Cause 2 below did not reproduce on v1.0.5 and is not
-part of the issue.
+build gives 1374 symbols, 0 giants, 0.4 MB). Closed 2026-09-19: fixed in `943bf1f8` on
+`version-1.0.6`, shipping in 1.0.6, and widened to a RECORD field labelled `Key`/`Index` and to a
+VIEW's `PROJECT(Project)`/JOIN (a token counts as the keyword only when it is not a label and is
+followed by its own `(`; the paren scan is bounded by the owning FILE or VIEW). Cause 2 below did
+not reproduce on v1.0.5 and is not part of the issue or the upstream fix.
 
 **Problem.** Workspace symbol search (`workspace/symbol`, `lsp_find_symbol`, Ctrl+T in the IDE)
 returns entries whose `name` is 100,000+ characters long, and the same symbol twice. On the
